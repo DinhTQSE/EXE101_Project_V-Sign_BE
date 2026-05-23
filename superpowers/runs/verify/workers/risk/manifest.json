@@ -1,0 +1,6 @@
+{
+  "taskId": "risk",
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\risk\\output.md",
+  "content": "## Objective\n\nReview operational risks and validation gates for \"Validation and risk review\".\n\n## Risks\n\n- Missing skill metadata can break task mapping.\n- Worker output drift can make the final merge nondeterministic.\n- External-agent dependencies would make smoke testing flaky.\n\n## Validation Plan\n\n- Validate required Markdown headings for every worker result.\n- Run an orchestrator smoke command that exercises parallel subprocess execution.\n- Cover request decomposition and merge ordering with Vitest.\n\n## Mitigations\n\n- Fail fast when a skill directory is missing `skill.json` or `SKILL.md`.\n- Keep worker generation deterministic and template-driven.\n- Default to local internal workers and make future external adapters optional.\n",
+  "generatedAt": "2026-05-21T06:49:45.594Z"
+}

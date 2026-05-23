@@ -1,0 +1,57 @@
+{
+  "task": {
+    "id": "report",
+    "title": "Delivery report",
+    "goal": "Summarize the architecture decisions and final execution artifacts into a concise merged report.",
+    "preferredSkillId": "report-assembler",
+    "request": "Inspect this frontend repo, decompose the work, run parallel template-based workers, validate their outputs, and merge a final Markdown report.",
+    "skill": {
+      "id": "report-assembler",
+      "name": "Superpower Report Assembler",
+      "description": "Builds concise merged delivery reports from worker outputs.",
+      "keywords": [
+        "report",
+        "merge",
+        "summary",
+        "delivery",
+        "handoff",
+        "final"
+      ],
+      "mergeOrder": 40,
+      "requiredSections": [
+        "Objective",
+        "Summary",
+        "Decisions",
+        "Next Actions"
+      ],
+      "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-report-assembler",
+      "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-report-assembler\\SKILL.md",
+      "prompt": "# Superpower Report Assembler\n\nUse this template when a task needs a concise final report, merge summary, or delivery handoff.\n\nExpected output:\n- `## Objective`\n- `## Summary`\n- `## Decisions`\n- `## Next Actions`\n\nFocus:\n- Merge inputs deterministically.\n- Keep the summary high signal.\n- Preserve references to source task outputs.\n"
+    }
+  },
+  "skill": {
+    "id": "report-assembler",
+    "name": "Superpower Report Assembler",
+    "description": "Builds concise merged delivery reports from worker outputs.",
+    "keywords": [
+      "report",
+      "merge",
+      "summary",
+      "delivery",
+      "handoff",
+      "final"
+    ],
+    "mergeOrder": 40,
+    "requiredSections": [
+      "Objective",
+      "Summary",
+      "Decisions",
+      "Next Actions"
+    ],
+    "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-report-assembler",
+    "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-report-assembler\\SKILL.md",
+    "prompt": "# Superpower Report Assembler\n\nUse this template when a task needs a concise final report, merge summary, or delivery handoff.\n\nExpected output:\n- `## Objective`\n- `## Summary`\n- `## Decisions`\n- `## Next Actions`\n\nFocus:\n- Merge inputs deterministically.\n- Keep the summary high signal.\n- Preserve references to source task outputs.\n"
+  },
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\smoke\\workers\\report\\output.md",
+  "manifestPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\smoke\\workers\\report\\manifest.json"
+}

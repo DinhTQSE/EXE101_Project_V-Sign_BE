@@ -1,0 +1,6 @@
+{
+  "taskId": "architecture",
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\architecture\\output.md",
+  "content": "## Objective\n\nDefine the repo-native orchestration path for \"Architecture proposal\".\n\n## Constraints\n\n- Must run locally with current Node tooling.\n- Must not depend on backend services or network calls.\n- Must expose a simple project CLI entrypoint and reusable templates.\n\n## Proposed Architecture\n\n- `cli.mjs` parses commands and creates the run directory.\n- `registry.mjs` loads project skill metadata from `skills/`.\n- `planner.mjs` decomposes the top-level request into deterministic worker tasks.\n- `orchestrator.mjs` spawns parallel worker subprocesses and validates outputs before merge.\n\n## Execution Notes\n\n- Each worker receives isolated JSON input and writes one Markdown file plus a JSON manifest.\n- Internal worker mode is the default MVP because it is stable for CI and smoke tests.\n- The final report is merged in a fixed `mergeOrder` derived from skill metadata.\n",
+  "generatedAt": "2026-05-21T06:49:45.605Z"
+}

@@ -1,0 +1,6 @@
+{
+  "taskId": "evidence",
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\smoke\\workers\\evidence\\output.md",
+  "content": "## Objective\n\nMap repo facts and constraints for \"Repository evidence scan\".\n\n## Repository Evidence\n\n- The FE repo already contains `.codex/`, `skills/`, `docs/superpowers/`, and npm scripts.\n- The stack is Vite + React + TypeScript, which makes a Node-based sidecar CLI a natural fit.\n- Task goal: Extract the repo-native constraints, existing systems, and reusable assets relevant to the request.\n- Mapped skill: Superpower Evidence Synthesizer\n- Request keywords: inspect, frontend, decompose, parallel, template-based, workers, validate, their\n\n## Findings\n\n- No existing orchestrator runtime or agent runner was found in the repo.\n- Existing docs already use the `docs/superpowers/` namespace, so output should land there.\n- A deterministic local worker is required for smoke testing without external AI dependencies.\n\n## Recommended Inputs\n\n- Skill metadata from `skills/*/skill.json`\n- User request text provided to the orchestrator\n- Output directory under `docs/superpowers/runs/`\n",
+  "generatedAt": "2026-05-21T06:49:45.557Z"
+}

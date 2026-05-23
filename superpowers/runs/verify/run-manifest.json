@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-05-21T06:49:45.551Z",
+  "request": "Verify the async multi-agent orchestrator flow with local deterministic workers.",
+  "tasks": [
+    {
+      "id": "evidence",
+      "skillId": "evidence-synthesizer",
+      "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\evidence\\output.md"
+    },
+    {
+      "id": "architecture",
+      "skillId": "architecture-planner",
+      "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\architecture\\output.md"
+    },
+    {
+      "id": "risk",
+      "skillId": "risk-reviewer",
+      "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\risk\\output.md"
+    },
+    {
+      "id": "report",
+      "skillId": "report-assembler",
+      "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\report\\output.md"
+    }
+  ],
+  "reportPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\final-report.md"
+}

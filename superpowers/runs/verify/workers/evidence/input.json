@@ -1,0 +1,59 @@
+{
+  "task": {
+    "id": "evidence",
+    "title": "Repository evidence scan",
+    "goal": "Extract the repo-native constraints, existing systems, and reusable assets relevant to the request.",
+    "preferredSkillId": "evidence-synthesizer",
+    "request": "Verify the async multi-agent orchestrator flow with local deterministic workers.",
+    "skill": {
+      "id": "evidence-synthesizer",
+      "name": "Superpower Evidence Synthesizer",
+      "description": "Collects project evidence, assumptions, and context for downstream tasks.",
+      "keywords": [
+        "evidence",
+        "analysis",
+        "context",
+        "repository",
+        "facts",
+        "inputs",
+        "discovery"
+      ],
+      "mergeOrder": 20,
+      "requiredSections": [
+        "Objective",
+        "Repository Evidence",
+        "Findings",
+        "Recommended Inputs"
+      ],
+      "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-evidence-synthesizer",
+      "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-evidence-synthesizer\\SKILL.md",
+      "prompt": "# Superpower Evidence Synthesizer\n\nUse this template when a task needs repository facts, assumptions, implementation evidence, or source-backed observations.\n\nExpected output:\n- `## Objective`\n- `## Repository Evidence`\n- `## Findings`\n- `## Recommended Inputs`\n\nFocus:\n- Prefer direct repository evidence over speculation.\n- State assumptions explicitly when evidence is missing.\n- Highlight artifacts that downstream agents should consume.\n"
+    }
+  },
+  "skill": {
+    "id": "evidence-synthesizer",
+    "name": "Superpower Evidence Synthesizer",
+    "description": "Collects project evidence, assumptions, and context for downstream tasks.",
+    "keywords": [
+      "evidence",
+      "analysis",
+      "context",
+      "repository",
+      "facts",
+      "inputs",
+      "discovery"
+    ],
+    "mergeOrder": 20,
+    "requiredSections": [
+      "Objective",
+      "Repository Evidence",
+      "Findings",
+      "Recommended Inputs"
+    ],
+    "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-evidence-synthesizer",
+    "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-evidence-synthesizer\\SKILL.md",
+    "prompt": "# Superpower Evidence Synthesizer\n\nUse this template when a task needs repository facts, assumptions, implementation evidence, or source-backed observations.\n\nExpected output:\n- `## Objective`\n- `## Repository Evidence`\n- `## Findings`\n- `## Recommended Inputs`\n\nFocus:\n- Prefer direct repository evidence over speculation.\n- State assumptions explicitly when evidence is missing.\n- Highlight artifacts that downstream agents should consume.\n"
+  },
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\evidence\\output.md",
+  "manifestPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\evidence\\manifest.json"
+}

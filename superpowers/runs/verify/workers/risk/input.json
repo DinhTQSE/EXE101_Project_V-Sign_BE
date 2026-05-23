@@ -1,0 +1,59 @@
+{
+  "task": {
+    "id": "risk",
+    "title": "Validation and risk review",
+    "goal": "Identify delivery risks, smoke-test scope, and lightweight validation gates for the MVP.",
+    "preferredSkillId": "risk-reviewer",
+    "request": "Verify the async multi-agent orchestrator flow with local deterministic workers.",
+    "skill": {
+      "id": "risk-reviewer",
+      "name": "Superpower Risk Reviewer",
+      "description": "Surfaces delivery risks, validations, and mitigation actions.",
+      "keywords": [
+        "risk",
+        "validation",
+        "smoke",
+        "test",
+        "failure",
+        "guardrail",
+        "mitigation"
+      ],
+      "mergeOrder": 30,
+      "requiredSections": [
+        "Objective",
+        "Risks",
+        "Validation Plan",
+        "Mitigations"
+      ],
+      "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-risk-reviewer",
+      "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-risk-reviewer\\SKILL.md",
+      "prompt": "# Superpower Risk Reviewer\n\nUse this template when a task needs validation strategy, risk analysis, or operational guardrails.\n\nExpected output:\n- `## Objective`\n- `## Risks`\n- `## Validation Plan`\n- `## Mitigations`\n\nFocus:\n- Prefer concrete risks tied to the current repo state.\n- Distinguish build-time, runtime, and workflow risks.\n- Keep mitigations small and directly actionable.\n"
+    }
+  },
+  "skill": {
+    "id": "risk-reviewer",
+    "name": "Superpower Risk Reviewer",
+    "description": "Surfaces delivery risks, validations, and mitigation actions.",
+    "keywords": [
+      "risk",
+      "validation",
+      "smoke",
+      "test",
+      "failure",
+      "guardrail",
+      "mitigation"
+    ],
+    "mergeOrder": 30,
+    "requiredSections": [
+      "Objective",
+      "Risks",
+      "Validation Plan",
+      "Mitigations"
+    ],
+    "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-risk-reviewer",
+    "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-risk-reviewer\\SKILL.md",
+    "prompt": "# Superpower Risk Reviewer\n\nUse this template when a task needs validation strategy, risk analysis, or operational guardrails.\n\nExpected output:\n- `## Objective`\n- `## Risks`\n- `## Validation Plan`\n- `## Mitigations`\n\nFocus:\n- Prefer concrete risks tied to the current repo state.\n- Distinguish build-time, runtime, and workflow risks.\n- Keep mitigations small and directly actionable.\n"
+  },
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\risk\\output.md",
+  "manifestPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\verify\\workers\\risk\\manifest.json"
+}

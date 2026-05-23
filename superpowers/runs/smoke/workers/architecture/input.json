@@ -1,0 +1,59 @@
+{
+  "task": {
+    "id": "architecture",
+    "title": "Architecture proposal",
+    "goal": "Define the orchestrator structure, file ownership, and task flow that best fits the project.",
+    "preferredSkillId": "architecture-planner",
+    "request": "Inspect this frontend repo, decompose the work, run parallel template-based workers, validate their outputs, and merge a final Markdown report.",
+    "skill": {
+      "id": "architecture-planner",
+      "name": "Superpower Architecture Planner",
+      "description": "Plans repo-native architecture, module boundaries, and execution flow.",
+      "keywords": [
+        "architecture",
+        "orchestrator",
+        "system",
+        "module",
+        "interface",
+        "flow",
+        "integration"
+      ],
+      "mergeOrder": 10,
+      "requiredSections": [
+        "Objective",
+        "Constraints",
+        "Proposed Architecture",
+        "Execution Notes"
+      ],
+      "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-architecture-planner",
+      "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-architecture-planner\\SKILL.md",
+      "prompt": "# Superpower Architecture Planner\n\nUse this template when a task needs system structure, interfaces, execution order, or component boundaries.\n\nExpected output:\n- `## Objective`\n- `## Constraints`\n- `## Proposed Architecture`\n- `## Execution Notes`\n\nFocus:\n- Reuse the existing project layout before proposing new modules.\n- Keep implementation slices small and isolated.\n- Call out integration points, file ownership, and failure modes.\n"
+    }
+  },
+  "skill": {
+    "id": "architecture-planner",
+    "name": "Superpower Architecture Planner",
+    "description": "Plans repo-native architecture, module boundaries, and execution flow.",
+    "keywords": [
+      "architecture",
+      "orchestrator",
+      "system",
+      "module",
+      "interface",
+      "flow",
+      "integration"
+    ],
+    "mergeOrder": 10,
+    "requiredSections": [
+      "Objective",
+      "Constraints",
+      "Proposed Architecture",
+      "Execution Notes"
+    ],
+    "directory": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-architecture-planner",
+    "promptPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\skills\\superpower-architecture-planner\\SKILL.md",
+    "prompt": "# Superpower Architecture Planner\n\nUse this template when a task needs system structure, interfaces, execution order, or component boundaries.\n\nExpected output:\n- `## Objective`\n- `## Constraints`\n- `## Proposed Architecture`\n- `## Execution Notes`\n\nFocus:\n- Reuse the existing project layout before proposing new modules.\n- Keep implementation slices small and isolated.\n- Call out integration points, file ownership, and failure modes.\n"
+  },
+  "outputPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\smoke\\workers\\architecture\\output.md",
+  "manifestPath": "C:\\Users\\KHAI\\Documents\\Exe201\\source-code\\EXE101_Project_V-Sign_FE\\docs\\superpowers\\runs\\smoke\\workers\\architecture\\manifest.json"
+}
