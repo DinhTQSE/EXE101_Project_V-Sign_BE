@@ -1,0 +1,9 @@
+com\vsign\backend\migration\FlywayMigrationTest.class
+com\vsign\backend\auth\AuthControllerIT.class
+com\vsign\backend\dictionary\DictionaryIT.class
+com\vsign\backend\gamification\GamificationControllerIT.class
+com\vsign\backend\monetization\SubscriptionControllerIT.class
+com\vsign\backend\admin\AdminControllerIT.class
+com\vsign\backend\learning\LearningWorkflowIT.class
+com\vsign\backend\auth\ProfileControllerIT.class
+com\vsign\backend\BootSmokeTest.class
