@@ -1,59 +1,35 @@
 package com.vsign.backend.auth.dto;
 
-import java.time.Instant;
 import java.util.List;
 
 public record ProfileResponse(
+        String id,
         String email,
         String fullName,
-        String role,
+        String displayName,
         String avatarUrl,
+        String bio,
+        String role,
         String accountType,
         int totalXp,
         int currentStreak,
         int longestStreak,
-        List<BadgeSummaryResponse> badges,
-        SubscriptionSummaryResponse subscription
+        SubscriptionSummaryResponse subscription,
+        List<BadgeSummaryResponse> badges
 ) {
-    public static ProfileResponse fromUser(
-            String email,
-            String fullName,
-            String role,
-            String avatarUrl,
-            String accountType,
-            int totalXp,
-            int currentStreak,
-            int longestStreak
-    ) {
-        return new ProfileResponse(
-                email,
-                fullName,
-                role,
-                avatarUrl,
-                accountType,
-                totalXp,
-                currentStreak,
-                longestStreak,
-                List.of(),
-                SubscriptionSummaryResponse.placeholder(accountType)
-        );
-    }
-
-    public record BadgeSummaryResponse(
-            String code,
-            String name,
-            Instant unlockedAt
-    ) {
-    }
-
     public record SubscriptionSummaryResponse(
             String planType,
             String status,
-            Instant startDate,
-            Instant endDate
+            String startDate,
+            String endDate
     ) {
-        static SubscriptionSummaryResponse placeholder(String accountType) {
-            return new SubscriptionSummaryResponse(accountType, "INACTIVE", null, null);
-        }
+    }
+
+    public record BadgeSummaryResponse(
+            String badgeId,
+            String name,
+            String iconUrl,
+            String earnedAt
+    ) {
     }
 }

@@ -3,9 +3,11 @@ package com.vsign.backend.learning.dto;
 public record PracticeItemSummaryResponse(
         String itemId,
         String lessonId,
-        String title,
+        String label,
         String category,
         String level,
-        int estimatedSeconds
+        String expectedGloss,
+        String sourceVideoFile,
+        String videoUrl
 ) {
 }

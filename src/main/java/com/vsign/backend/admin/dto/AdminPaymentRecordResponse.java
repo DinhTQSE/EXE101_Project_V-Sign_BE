@@ -2,11 +2,14 @@ package com.vsign.backend.admin.dto;
 
 public record AdminPaymentRecordResponse(
         String transactionId,
-        String userId,
-        String provider,
+        String userEmail,
+        String planId,
+        int amount,
+        String currency,
         String status,
-        long amountVnd,
+        String provider,
         String createdAt,
-        String updatedAt
+        String updatedAt,
+        String overrideReason
 ) {
 }

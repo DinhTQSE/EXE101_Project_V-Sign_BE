@@ -7,213 +7,173 @@ import com.vsign.backend.assessment.dto.AssessmentSubmissionResultResponse;
 import com.vsign.backend.assessment.dto.AssessmentSummaryResponse;
 import com.vsign.backend.assessment.dto.OptionResponse;
 import com.vsign.backend.assessment.dto.QuestionResponse;
-import com.vsign.backend.assessment.dto.QuestionResultResponse;
+import com.vsign.backend.assessment.persistence.AssessmentEntity;
+import com.vsign.backend.assessment.persistence.AssessmentOptionEntity;
+import com.vsign.backend.assessment.persistence.AssessmentOptionRepository;
+import com.vsign.backend.assessment.persistence.AssessmentQuestionEntity;
+import com.vsign.backend.assessment.persistence.AssessmentQuestionRepository;
+import com.vsign.backend.assessment.persistence.AssessmentRepository;
+import com.vsign.backend.assessment.persistence.AssessmentSubmissionAnswerEntity;
+import com.vsign.backend.assessment.persistence.AssessmentSubmissionAnswerRepository;
+import com.vsign.backend.assessment.persistence.AssessmentSubmissionEntity;
+import com.vsign.backend.assessment.persistence.AssessmentSubmissionRepository;
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class AssessmentService {
+    private final AssessmentRepository assessmentRepository;
+    private final AssessmentQuestionRepository questionRepository;
+    private final AssessmentOptionRepository optionRepository;
+    private final AssessmentSubmissionRepository submissionRepository;
+    private final AssessmentSubmissionAnswerRepository submissionAnswerRepository;
 
-    private static final List<AssessmentDefinition> ASSESSMENTS = List.of(
-            new AssessmentDefinition(
-                    "asl-basics-placement",
-                    "ASL Basics Placement",
-                    "Checks recognition of beginner vocabulary used by the onboarding path.",
-                    "beginner",
-                    70,
-                    8,
-                    List.of(
-                            question("q-hello", "Select the sign meaning Hello", "hello"),
-                            question("q-thank-you", "Select the sign meaning Thank you", "thank-you"),
-                            question("q-school", "Select the sign meaning School", "school")
-                    )
-            ),
-            new AssessmentDefinition(
-                    "daily-conversation-check",
-                    "Daily Conversation Check",
-                    "Measures readiness for common greeting and daily-need conversations.",
-                    "beginner",
-                    75,
-                    10,
-                    List.of(
-                            question("q-water", "Select the sign meaning Water", "water"),
-                            question("q-yesterday", "Select the sign meaning Yesterday", "yesterday")
-                    )
-            ),
-            new AssessmentDefinition(
-                    "place-vocabulary-review",
-                    "Place Vocabulary Review",
-                    "Reviews place-related vocabulary before moving into travel lessons.",
-                    "intermediate",
-                    80,
-                    12,
-                    List.of(
-                            question("q-hospital", "Select the sign meaning Hospital", "hospital"),
-                            question("q-school-review", "Select the sign meaning School", "school")
-                    )
-            )
-    );
-
-    private static QuestionDefinition question(String id, String prompt, String correctOptionId) {
-        return new QuestionDefinition(
-                id,
-                prompt,
-                "multiple-choice",
-                "/media/signs/" + correctOptionId + ".mp4",
-                correctOptionId,
-                List.of(
-                        new OptionResponse(correctOptionId, titleCase(correctOptionId)),
-                        new OptionResponse("distractor-greeting", "Greeting"),
-                        new OptionResponse("distractor-place", "Place")
-                )
-        );
+    public AssessmentService(
+            AssessmentRepository assessmentRepository,
+            AssessmentQuestionRepository questionRepository,
+            AssessmentOptionRepository optionRepository,
+            AssessmentSubmissionRepository submissionRepository,
+            AssessmentSubmissionAnswerRepository submissionAnswerRepository
+    ) {
+        this.assessmentRepository = assessmentRepository;
+        this.questionRepository = questionRepository;
+        this.optionRepository = optionRepository;
+        this.submissionRepository = submissionRepository;
+        this.submissionAnswerRepository = submissionAnswerRepository;
     }
 
     public List<AssessmentSummaryResponse> listAssessments() {
-        return ASSESSMENTS.stream()
-                .map(AssessmentDefinition::toSummary)
+        return assessmentRepository.findByPublishedTrueOrderByOrderIndexAsc().stream()
+                .map(assessment -> new AssessmentSummaryResponse(
+                        assessment.getAssessmentId(),
+                        assessment.getTitle(),
+                        (int) questionRepository.countByAssessmentId(assessment.getAssessmentId()),
+                        assessment.getPassingScore()
+                ))
                 .toList();
     }
 
-    public AssessmentDetailResponse getAssessment(String id) {
-        return findAssessment(id).toDetail();
-    }
-
-    public AssessmentSubmissionResultResponse submit(String assessmentId, AssessmentSubmissionRequest request) {
-        AssessmentDefinition assessment = findAssessment(assessmentId);
-        validateSubmission(request);
-
-        Map<String, QuestionDefinition> questionsById = assessment.questions().stream()
-                .collect(Collectors.toMap(QuestionDefinition::id, Function.identity()));
-        Map<String, AnswerRequest> answersByQuestionId = request.answers().stream()
-                .collect(Collectors.toMap(AnswerRequest::questionId, Function.identity(), (first, ignored) -> first));
-
-        List<QuestionResultResponse> results = assessment.questions().stream()
-                .map(question -> evaluateQuestion(question, answersByQuestionId.get(question.id())))
-                .toList();
-
-        ensureOnlyKnownQuestions(answersByQuestionId, questionsById);
-
-        int correctAnswers = (int) results.stream().filter(QuestionResultResponse::correct).count();
-        int score = Math.round(correctAnswers * 100.0f / assessment.questions().size());
-        boolean passed = score >= assessment.passingScore();
-        int awardedXp = correctAnswers * 10;
-        return new AssessmentSubmissionResultResponse(
-                assessment.id(),
-                request.userId().trim(),
-                score,
-                passed,
-                correctAnswers,
-                assessment.questions().size(),
-                awardedXp,
-                results
+    public AssessmentDetailResponse getAssessment(String assessmentId) {
+        AssessmentEntity assessment = findAssessment(assessmentId);
+        List<AssessmentQuestionEntity> questions = questionRepository.findByAssessmentIdOrderByOrderIndexAsc(assessmentId);
+        Map<String, List<AssessmentOptionEntity>> optionsByQuestion = optionsByQuestion(questions);
+        return new AssessmentDetailResponse(
+                assessment.getAssessmentId(),
+                assessment.getTitle(),
+                assessment.getPassingScore(),
+                questions.stream()
+                        .map(question -> toQuestion(question, optionsByQuestion.getOrDefault(question.getQuestionId(), List.of())))
+                        .toList()
         );
     }
 
-    private static QuestionResultResponse evaluateQuestion(QuestionDefinition question, AnswerRequest answer) {
-        String selectedOptionId = answer == null ? null : answer.selectedOptionId();
-        boolean correct = question.correctOptionId().equals(selectedOptionId);
-        return new QuestionResultResponse(question.id(), selectedOptionId, question.correctOptionId(), correct);
-    }
-
-    private static void ensureOnlyKnownQuestions(
-            Map<String, AnswerRequest> answersByQuestionId,
-            Map<String, QuestionDefinition> questionsById
-    ) {
-        boolean hasUnknownQuestion = answersByQuestionId.keySet().stream()
-                .anyMatch(questionId -> !questionsById.containsKey(questionId));
-        if (hasUnknownQuestion) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Submission contains unknown question id");
-        }
-    }
-
-    private static void validateSubmission(AssessmentSubmissionRequest request) {
-        if (request == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Submission body is required");
-        }
-        if (request.userId() == null || request.userId().isBlank()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "userId is required");
-        }
+    @Transactional
+    public AssessmentSubmissionResultResponse submit(String assessmentId, AssessmentSubmissionRequest request) {
+        AssessmentEntity assessment = findAssessment(assessmentId);
         if (request.answers() == null || request.answers().isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "At least one answer is required");
+            throw new BusinessException(ErrorCode.INVALID_REQUEST);
         }
-        boolean hasBlankAnswer = request.answers().stream()
-                .anyMatch(answer -> answer == null
-                        || answer.questionId() == null
-                        || answer.questionId().isBlank()
-                        || answer.selectedOptionId() == null
-                        || answer.selectedOptionId().isBlank());
-        if (hasBlankAnswer) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Each answer must include questionId and selectedOptionId");
+
+        List<AssessmentQuestionEntity> questions = questionRepository.findByAssessmentIdOrderByOrderIndexAsc(assessmentId);
+        Map<String, AssessmentQuestionEntity> questionsById = questions.stream()
+                .collect(Collectors.toMap(AssessmentQuestionEntity::getQuestionId, question -> question));
+        Map<String, List<AssessmentOptionEntity>> optionsByQuestion = optionsByQuestion(questions);
+        Map<String, Set<String>> optionIdsByQuestion = optionsByQuestion.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().stream().map(AssessmentOptionEntity::getOptionId).collect(Collectors.toSet())
+                ));
+
+        Map<String, String> answers = request.answers().stream()
+                .collect(Collectors.toMap(AnswerRequest::questionId, AnswerRequest::selectedAnswer, (left, right) -> right));
+        validateAnswers(answers, questionsById, optionIdsByQuestion);
+
+        int correct = 0;
+        for (AssessmentQuestionEntity question : questions) {
+            if (question.getCorrectAnswerId().equals(answers.get(question.getQuestionId()))) {
+                correct++;
+            }
         }
+        int score = questions.isEmpty() ? 0 : correct * 100 / questions.size();
+        boolean passed = score >= assessment.getPassingScore();
+        int awardedXp = passed ? 30 : 0;
+
+        AssessmentSubmissionEntity submission = submissionRepository.save(new AssessmentSubmissionEntity(
+                assessmentId,
+                request.userId(),
+                score,
+                passed,
+                correct,
+                questions.size(),
+                awardedXp
+        ));
+        for (AssessmentQuestionEntity question : questions) {
+            String selectedAnswer = answers.get(question.getQuestionId());
+            submissionAnswerRepository.save(new AssessmentSubmissionAnswerEntity(
+                    submission.getId(),
+                    question.getQuestionId(),
+                    selectedAnswer,
+                    question.getCorrectAnswerId().equals(selectedAnswer)
+            ));
+        }
+
+        return new AssessmentSubmissionResultResponse(
+                assessmentId,
+                request.userId(),
+                score,
+                passed,
+                correct,
+                questions.size(),
+                awardedXp
+        );
     }
 
-    private static AssessmentDefinition findAssessment(String id) {
-        if (id == null || id.isBlank()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Assessment id is required");
+    private AssessmentEntity findAssessment(String assessmentId) {
+        return assessmentRepository.findByAssessmentIdAndPublishedTrue(assessmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    private Map<String, List<AssessmentOptionEntity>> optionsByQuestion(List<AssessmentQuestionEntity> questions) {
+        List<String> questionIds = questions.stream()
+                .map(AssessmentQuestionEntity::getQuestionId)
+                .toList();
+        if (questionIds.isEmpty()) {
+            return Map.of();
         }
-        return ASSESSMENTS.stream()
-                .filter(assessment -> assessment.id().equals(id))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Assessment not found"));
+        return optionRepository.findByQuestionIdInOrderByOrderIndexAsc(questionIds).stream()
+                .collect(Collectors.groupingBy(AssessmentOptionEntity::getQuestionId));
     }
 
-    private static String titleCase(String value) {
-        String[] parts = value.split("-");
-        return java.util.Arrays.stream(parts)
-                .map(part -> part.substring(0, 1).toUpperCase() + part.substring(1))
-                .collect(Collectors.joining(" "));
-    }
-
-    private record AssessmentDefinition(
-            String id,
-            String title,
-            String description,
-            String difficulty,
-            int passingScore,
-            int estimatedMinutes,
-            List<QuestionDefinition> questions
+    private void validateAnswers(
+            Map<String, String> answers,
+            Map<String, AssessmentQuestionEntity> questionsById,
+            Map<String, Set<String>> optionIdsByQuestion
     ) {
-        AssessmentSummaryResponse toSummary() {
-            return new AssessmentSummaryResponse(
-                    id,
-                    title,
-                    description,
-                    difficulty,
-                    questions.size(),
-                    passingScore,
-                    estimatedMinutes
-            );
-        }
-
-        AssessmentDetailResponse toDetail() {
-            return new AssessmentDetailResponse(
-                    id,
-                    title,
-                    description,
-                    difficulty,
-                    passingScore,
-                    estimatedMinutes,
-                    questions.stream().map(QuestionDefinition::toResponse).toList()
-            );
+        for (Map.Entry<String, String> answer : answers.entrySet()) {
+            if (!questionsById.containsKey(answer.getKey())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+            }
+            if (answer.getValue() == null || !optionIdsByQuestion.getOrDefault(answer.getKey(), Set.of()).contains(answer.getValue())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+            }
         }
     }
 
-    private record QuestionDefinition(
-            String id,
-            String prompt,
-            String type,
-            String mediaUrl,
-            String correctOptionId,
-            List<OptionResponse> options
-    ) {
-        QuestionResponse toResponse() {
-            return new QuestionResponse(id, prompt, type, mediaUrl, options);
-        }
+    private QuestionResponse toQuestion(AssessmentQuestionEntity question, List<AssessmentOptionEntity> options) {
+        return new QuestionResponse(
+                question.getQuestionId(),
+                question.getPrompt(),
+                options.stream()
+                        .map(option -> new OptionResponse(option.getOptionId(), option.getText()))
+                        .toList(),
+                null
+        );
     }
 }

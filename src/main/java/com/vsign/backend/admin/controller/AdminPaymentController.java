@@ -5,9 +5,10 @@ import com.vsign.backend.admin.dto.AdminPaymentRecordResponse;
 import com.vsign.backend.admin.dto.ManualPaymentStatusRequest;
 import com.vsign.backend.admin.service.AdminPaymentService;
 import com.vsign.backend.common.response.SuccessResponse;
-import com.vsign.backend.common.security.JwtAuthFilter;
-import jakarta.servlet.http.HttpServletRequest;
+import com.vsign.backend.common.security.JwtService;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,35 +19,31 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/admin/payments")
+@PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
 public class AdminPaymentController {
+    private final AdminPaymentService paymentService;
 
-    private final AdminPaymentService adminPaymentService;
-
-    public AdminPaymentController(AdminPaymentService adminPaymentService) {
-        this.adminPaymentService = adminPaymentService;
+    public AdminPaymentController(AdminPaymentService paymentService) {
+        this.paymentService = paymentService;
     }
 
     @GetMapping
     public SuccessResponse<AdminPaymentPageResponse> listPayments(
-            @RequestParam(defaultValue = "0") Integer page,
-            @RequestParam(defaultValue = "20") Integer size,
-            HttpServletRequest request
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
-        String requesterRole = (String) request.getAttribute(JwtAuthFilter.AUTH_ROLE_ATTRIBUTE);
-        return SuccessResponse.ok("Admin payments retrieved", adminPaymentService.listPayments(requesterRole, page, size));
+        return SuccessResponse.ok("Admin payments loaded", paymentService.listPayments(page, size));
     }
 
     @PatchMapping("/{transactionId}")
-    public SuccessResponse<AdminPaymentRecordResponse> overridePaymentStatus(
+    public SuccessResponse<AdminPaymentRecordResponse> overrideStatus(
             @PathVariable String transactionId,
-            @Valid @RequestBody ManualPaymentStatusRequest requestBody,
-            HttpServletRequest request
+            @Valid @RequestBody ManualPaymentStatusRequest request,
+            @AuthenticationPrincipal JwtService.Principal principal
     ) {
-        String requesterRole = (String) request.getAttribute(JwtAuthFilter.AUTH_ROLE_ATTRIBUTE);
-        String actorEmail = (String) request.getAttribute(JwtAuthFilter.AUTH_EMAIL_ATTRIBUTE);
         return SuccessResponse.ok(
                 "Payment status updated",
-                adminPaymentService.overrideStatus(requesterRole, actorEmail, transactionId, requestBody)
+                paymentService.overrideStatus(transactionId, request, principal.email())
         );
     }
 }

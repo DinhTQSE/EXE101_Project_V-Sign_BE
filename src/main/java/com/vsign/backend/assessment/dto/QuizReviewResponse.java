@@ -4,7 +4,8 @@ import java.util.List;
 
 public record QuizReviewResponse(
         String attemptId,
-        String quizId,
+        int score,
+        boolean passed,
         List<QuizReviewQuestionResponse> questions
 ) {
 }

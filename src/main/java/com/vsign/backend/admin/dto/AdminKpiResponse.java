@@ -1,11 +1,10 @@
 package com.vsign.backend.admin.dto;
 
 public record AdminKpiResponse(
-        String fromDate,
-        String toDate,
-        int totalUsers,
-        int activeSubscriptions,
+        int successfulTransactions,
         long totalRevenueVnd,
-        int successfulTransactions
+        int activeUsers,
+        int premiumUsers,
+        int pendingReviews
 ) {
 }

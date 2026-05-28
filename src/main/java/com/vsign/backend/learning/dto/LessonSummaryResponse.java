@@ -3,11 +3,12 @@ package com.vsign.backend.learning.dto;
 public record LessonSummaryResponse(
         String lessonId,
         String title,
-        int orderIndex,
+        String description,
+        String videoUrl,
         int durationSeconds,
+        int orderIndex,
         boolean requiresPremium,
         boolean locked,
-        String status,
-        int progressPct
+        String status
 ) {
 }

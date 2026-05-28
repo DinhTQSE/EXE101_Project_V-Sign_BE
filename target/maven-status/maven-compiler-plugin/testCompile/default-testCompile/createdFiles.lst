@@ -7,3 +7,4 @@ com\vsign\backend\admin\AdminControllerIT.class
 com\vsign\backend\learning\LearningWorkflowIT.class
 com\vsign\backend\auth\ProfileControllerIT.class
 com\vsign\backend\BootSmokeTest.class
+com\vsign\backend\contract\OpenApiContractIT.class

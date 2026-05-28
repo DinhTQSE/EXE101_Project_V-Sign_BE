@@ -1,32 +1,31 @@
 package com.vsign.backend.common.exception;
 
-import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 public record ApiErrorResponse(
-        Instant timestamp,
+        boolean success,
         int status,
-        String error,
         String code,
         String message,
-        String path,
-        List<ValidationError> validationErrors
+        List<ValidationError> validationErrors,
+        OffsetDateTime timestamp
 ) {
-    public static ApiErrorResponse of(ErrorCode code, String message, String path) {
+    public static ApiErrorResponse of(ErrorCode code, String message) {
+        return new ApiErrorResponse(false, code.status().value(), code.name(), message, List.of(), OffsetDateTime.now());
+    }
+
+    public static ApiErrorResponse validation(List<ValidationError> errors) {
         return new ApiErrorResponse(
-                Instant.now(),
-                code.status().value(),
-                code.status().getReasonPhrase(),
-                code.name(),
-                message,
-                path,
-                List.of()
+                false,
+                ErrorCode.VALIDATION_ERROR.status().value(),
+                ErrorCode.VALIDATION_ERROR.name(),
+                ErrorCode.VALIDATION_ERROR.defaultMessage(),
+                errors,
+                OffsetDateTime.now()
         );
     }
 
-    public record ValidationError(
-            String field,
-            String message
-    ) {
+    public record ValidationError(String field, String message) {
     }
 }

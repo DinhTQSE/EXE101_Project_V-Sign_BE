@@ -6,6 +6,7 @@ import com.vsign.backend.assessment.dto.AssessmentSubmissionResultResponse;
 import com.vsign.backend.assessment.dto.AssessmentSummaryResponse;
 import com.vsign.backend.assessment.service.AssessmentService;
 import com.vsign.backend.common.response.SuccessResponse;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/assessments")
 public class AssessmentController {
-
     private final AssessmentService assessmentService;
 
     public AssessmentController(AssessmentService assessmentService) {
@@ -25,20 +25,20 @@ public class AssessmentController {
     }
 
     @GetMapping
-    public SuccessResponse<List<AssessmentSummaryResponse>> listAssessments() {
-        return SuccessResponse.ok("Assessments retrieved", assessmentService.listAssessments());
+    public SuccessResponse<List<AssessmentSummaryResponse>> list() {
+        return SuccessResponse.ok("Assessments loaded", assessmentService.listAssessments());
     }
 
-    @GetMapping("/{id}")
-    public SuccessResponse<AssessmentDetailResponse> getAssessment(@PathVariable String id) {
-        return SuccessResponse.ok("Assessment detail retrieved", assessmentService.getAssessment(id));
+    @GetMapping("/{assessmentId}")
+    public SuccessResponse<AssessmentDetailResponse> detail(@PathVariable String assessmentId) {
+        return SuccessResponse.ok("Assessment loaded", assessmentService.getAssessment(assessmentId));
     }
 
-    @PostMapping("/{id}/submissions")
-    public SuccessResponse<AssessmentSubmissionResultResponse> submitAssessment(
-            @PathVariable String id,
-            @RequestBody AssessmentSubmissionRequest request
+    @PostMapping("/{assessmentId}/submissions")
+    public SuccessResponse<AssessmentSubmissionResultResponse> submit(
+            @PathVariable String assessmentId,
+            @Valid @RequestBody AssessmentSubmissionRequest request
     ) {
-        return SuccessResponse.ok("Assessment submission evaluated", assessmentService.submit(id, request));
+        return SuccessResponse.ok("Assessment submitted", assessmentService.submit(assessmentId, request));
     }
 }

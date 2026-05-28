@@ -3,10 +3,11 @@ package com.vsign.backend.learning.dto;
 public record ChapterSummaryResponse(
         String chapterId,
         String title,
-        int orderIndex,
+        String description,
         int lessonCount,
+        int orderIndex,
         boolean requiresPremium,
         boolean locked,
-        int progressPct
+        int completionPercent
 ) {
 }

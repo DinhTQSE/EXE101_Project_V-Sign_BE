@@ -3,73 +3,67 @@ package com.vsign.backend.admin.service;
 import com.vsign.backend.admin.dto.ReviewDecisionRequest;
 import com.vsign.backend.admin.dto.ReviewQueueItemResponse;
 import com.vsign.backend.admin.dto.ReviewQueueResponse;
+import com.vsign.backend.admin.persistence.AdminReviewQueueEntity;
+import com.vsign.backend.admin.persistence.AdminReviewQueueRepository;
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class AdminContentReviewService {
-
-    private final List<ReviewQueueItemResponse> queue = new ArrayList<>(List.of(
-            new ReviewQueueItemResponse("doc-2001", "DOCUMENT_UPLOAD", "user-1001", "Emergency Sign Language Notes", "PENDING_REVIEW", "HIGH", "2026-05-21T09:00:00Z"),
-            new ReviewQueueItemResponse("sign-3001", "SIGN_DICTIONARY_ENTRY", "user-1002", "School Vocabulary Submission", "PENDING_REVIEW", "MEDIUM", "2026-05-20T14:30:00Z"),
-            new ReviewQueueItemResponse("doc-2002", "DOCUMENT_UPLOAD", "user-1003", "Healthcare Practice Worksheet", "NEEDS_REVISION", "LOW", "2026-05-19T11:15:00Z")
-    ));
-
     private final AdminAuditService auditService;
+    private final AdminReviewQueueRepository reviewQueueRepository;
 
-    public AdminContentReviewService(AdminAuditService auditService) {
+    public AdminContentReviewService(AdminAuditService auditService, AdminReviewQueueRepository reviewQueueRepository) {
         this.auditService = auditService;
+        this.reviewQueueRepository = reviewQueueRepository;
     }
 
-    public ReviewQueueResponse listReviewQueue(String requesterRole) {
-        requireReviewerOrAdmin(requesterRole);
-        return new ReviewQueueResponse("CONTENT_REVIEWER_OR_ADMIN", List.copyOf(queue));
+    public ReviewQueueResponse listQueue() {
+        List<ReviewQueueItemResponse> items = reviewQueueRepository.findAllByOrderByContentIdAsc().stream()
+                .map(this::toResponse)
+                .toList();
+        return new ReviewQueueResponse(items, items.size());
     }
 
-    public ReviewQueueItemResponse decide(
-            String requesterRole,
-            String actorEmail,
-            String contentId,
-            ReviewDecisionRequest request
-    ) {
-        requireAdminRole(requesterRole);
-        String decision = request.decision().trim().toUpperCase();
-        if (!decision.equals("APPROVED") && !decision.equals("NEEDS_REVISION") && !decision.equals("REJECTED")) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "decision must be APPROVED, NEEDS_REVISION, or REJECTED");
-        }
-
-        for (int i = 0; i < queue.size(); i++) {
-            ReviewQueueItemResponse existing = queue.get(i);
-            if (existing.contentId().equals(contentId)) {
-                ReviewQueueItemResponse updated = new ReviewQueueItemResponse(
-                        existing.contentId(),
-                        existing.contentType(),
-                        existing.submittedBy(),
-                        existing.title(),
-                        decision,
-                        existing.priority(),
-                        existing.submittedAt()
-                );
-                queue.set(i, updated);
-                auditService.log(actorEmail, "CONTENT_REVIEW_DECISION", contentId, request.reason().trim());
-                return updated;
-            }
-        }
-        throw new BusinessException(ErrorCode.NOT_FOUND, "Review queue item not found");
+    @Transactional
+    public ReviewQueueItemResponse decide(String contentId, ReviewDecisionRequest request, String actorEmail) {
+        AdminReviewQueueEntity current = reviewQueueRepository.findById(contentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        String status = normalizeDecision(request.decision());
+        current.markReviewed(status, actorEmail, request.reason());
+        AdminReviewQueueEntity updated = reviewQueueRepository.save(current);
+        auditService.recordAction(actorEmail, "CONTENT_REVIEW_DECISION", "CONTENT", contentId, request.reason());
+        return toResponse(updated);
     }
 
-    private static void requireReviewerOrAdmin(String role) {
-        if (role == null || !(role.equalsIgnoreCase("ADMIN") || role.equalsIgnoreCase("CONTENT_REVIEWER"))) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "CONTENT_REVIEWER or ADMIN role is required");
-        }
+    public int pendingReviewCount() {
+        return reviewQueueRepository.countByStatus("PENDING");
     }
 
-    private static void requireAdminRole(String role) {
-        if (role == null || !role.equalsIgnoreCase("ADMIN")) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "ADMIN role is required");
-        }
+    private String normalizeDecision(String decision) {
+        String normalized = decision.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "APPROVED", "REJECTED", "NEEDS_CHANGES" -> normalized;
+            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        };
+    }
+
+    private ReviewQueueItemResponse toResponse(AdminReviewQueueEntity item) {
+        return new ReviewQueueItemResponse(
+                item.getContentId(),
+                item.getTitle(),
+                item.getContentType(),
+                item.getSubmittedBy(),
+                item.getStatus(),
+                item.getSubmittedAt().toString(),
+                item.getReviewedBy(),
+                item.getReviewedAt() == null ? null : item.getReviewedAt().toString(),
+                item.getReason()
+        );
     }
 }

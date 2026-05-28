@@ -1,6 +1,7 @@
 package com.vsign.backend.auth.controller;
 
 import com.vsign.backend.auth.dto.AuthResponse;
+import com.vsign.backend.auth.dto.PasswordResetRequest;
 import com.vsign.backend.auth.dto.LoginRequest;
 import com.vsign.backend.auth.dto.RegisterRequest;
 import com.vsign.backend.auth.service.AuthService;
@@ -16,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
-
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -32,5 +32,11 @@ public class AuthController {
     @PostMapping("/login")
     public SuccessResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return SuccessResponse.ok("Login successful", authService.login(request));
+    }
+
+    @PostMapping("/password-reset/request")
+    public SuccessResponse<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        authService.requestPasswordReset(request);
+        return SuccessResponse.ok("Password reset requested", null);
     }
 }

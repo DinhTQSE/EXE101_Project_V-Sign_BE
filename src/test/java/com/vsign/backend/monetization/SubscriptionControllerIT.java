@@ -5,10 +5,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.vsign.backend.common.security.JwtService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -20,6 +22,9 @@ class SubscriptionControllerIT {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JwtService jwtService;
 
     @Test
     void listsSubscriptionPlansWithConcreteDtoFields() throws Exception {
@@ -35,9 +40,10 @@ class SubscriptionControllerIT {
         mockMvc.perform(get("/api/v1/subscription/plans"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.plans.length()").value(3))
-                .andExpect(jsonPath("$.data.plans[0].planId").value("pro-monthly"))
-                .andExpect(jsonPath("$.data.plans[0].active").value(true));
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[0].planType").value("MONTHLY"))
+                .andExpect(jsonPath("$.data[0].price").value(49000))
+                .andExpect(jsonPath("$.data[0].currency").value("VND"));
     }
 
     @Test
@@ -64,14 +70,14 @@ class SubscriptionControllerIT {
                         .content("""
                                 {
                                   "provider": "MOMO",
-                                  "planId": "pro-monthly",
-                                  "amount": 99000
+                                  "planType": "MONTHLY"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.transactionId").isNotEmpty())
                 .andExpect(jsonPath("$.data.provider").value("MOMO"))
+                .andExpect(jsonPath("$.data.planType").value("MONTHLY"))
                 .andExpect(jsonPath("$.data.status").value("PENDING"));
     }
 
@@ -82,8 +88,7 @@ class SubscriptionControllerIT {
                         .content("""
                                 {
                                   "provider": "CARD",
-                                  "planId": "pro-monthly",
-                                  "amount": 99000
+                                  "planType": "MONTHLY"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
@@ -121,8 +126,7 @@ class SubscriptionControllerIT {
                         .content("""
                                 {
                                   "provider": "MOMO",
-                                  "planId": "pro-monthly",
-                                  "amount": 99000
+                                  "planType": "MONTHLY"
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -143,5 +147,36 @@ class SubscriptionControllerIT {
         mockMvc.perform(get("/api/v1/payments/missing-transaction"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    void returnsCurrentSubscriptionAndPaymentHistoryForAuthenticatedUser() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "provider": "ZALOPAY",
+                                  "planType": "YEARLY"
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/me/subscription")
+                        .header(HttpHeaders.AUTHORIZATION, bearer("premium@vsign.vn", "USER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.planType").value("MONTHLY"));
+
+        mockMvc.perform(get("/api/v1/me/payments")
+                        .header(HttpHeaders.AUTHORIZATION, bearer("premium@vsign.vn", "USER")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(org.hamcrest.Matchers.greaterThanOrEqualTo(1)))
+                .andExpect(jsonPath("$.data[0].transactionId").isNotEmpty());
+    }
+
+    private String bearer(String email, String role) {
+        return "Bearer " + jwtService.generateToken(email, role);
     }
 }

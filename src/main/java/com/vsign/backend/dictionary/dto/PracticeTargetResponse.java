@@ -1,11 +1,13 @@
 package com.vsign.backend.dictionary.dto;
 
 public record PracticeTargetResponse(
-        String entryId,
+        int entryId,
+        int lessonId,
+        String label,
+        boolean requiresPremium,
         String unitId,
         String chapterId,
-        String lessonId,
-        String quizId,
-        boolean requiresPremium
+        String lessonKey,
+        String quizId
 ) {
 }

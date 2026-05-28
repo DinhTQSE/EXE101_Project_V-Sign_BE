@@ -1,12 +1,12 @@
 package com.vsign.backend.admin.dto;
 
 public record AdminUserResponse(
-        String userId,
+        String id,
         String email,
-        String fullName,
+        String displayName,
         String role,
         String status,
-        int currentStreak,
-        int xp
+        String accountType,
+        String createdAt
 ) {
 }

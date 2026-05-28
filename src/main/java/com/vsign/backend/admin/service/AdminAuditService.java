@@ -1,37 +1,53 @@
 package com.vsign.backend.admin.service;
 
 import com.vsign.backend.admin.dto.AdminAuditLogResponse;
-import com.vsign.backend.common.exception.BusinessException;
-import com.vsign.backend.common.exception.ErrorCode;
-import java.time.Instant;
-import java.util.ArrayList;
+import com.vsign.backend.admin.persistence.AdminAuditLogEntity;
+import com.vsign.backend.admin.persistence.AdminAuditLogRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class AdminAuditService {
+    private final AdminAuditLogRepository auditLogRepository;
 
-    private final List<AdminAuditLogResponse> entries = new ArrayList<>();
+    public AdminAuditService(AdminAuditLogRepository auditLogRepository) {
+        this.auditLogRepository = auditLogRepository;
+    }
 
-    public synchronized void log(String actorEmail, String action, String targetId, String reason) {
-        entries.add(new AdminAuditLogResponse(
-                "audit-" + (entries.size() + 1),
+    @Transactional
+    public AdminAuditLogResponse recordAction(
+            String actorEmail,
+            String action,
+            String targetType,
+            String targetId,
+            String reason
+    ) {
+        return toResponse(auditLogRepository.save(new AdminAuditLogEntity(
                 actorEmail,
                 action,
+                targetType,
                 targetId,
-                reason,
-                Instant.now().toString()
-        ));
+                reason
+        )));
     }
 
-    public synchronized List<AdminAuditLogResponse> list(String requesterRole) {
-        requireAdminRole(requesterRole);
-        return List.copyOf(entries);
+    public List<AdminAuditLogResponse> list() {
+        return auditLogRepository.findAllByOrderByIdDesc().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
-    private static void requireAdminRole(String role) {
-        if (role == null || !role.equalsIgnoreCase("ADMIN")) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "ADMIN role is required");
-        }
+    private AdminAuditLogResponse toResponse(AdminAuditLogEntity log) {
+        return new AdminAuditLogResponse(
+                "audit-" + log.getId(),
+                log.getActorEmail(),
+                log.getAction(),
+                log.getTargetType(),
+                log.getTargetId(),
+                log.getReason(),
+                log.getCreatedAt().toString()
+        );
     }
 }

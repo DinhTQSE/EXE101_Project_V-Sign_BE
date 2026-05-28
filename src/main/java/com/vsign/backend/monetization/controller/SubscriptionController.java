@@ -5,6 +5,7 @@ import com.vsign.backend.monetization.dto.CheckoutIntentRequest;
 import com.vsign.backend.monetization.dto.CheckoutIntentResponse;
 import com.vsign.backend.monetization.dto.SubscriptionPlanResponse;
 import com.vsign.backend.monetization.service.SubscriptionService;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -15,7 +16,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/subscriptions")
 public class SubscriptionController {
-
     private final SubscriptionService subscriptionService;
 
     public SubscriptionController(SubscriptionService subscriptionService) {
@@ -23,14 +23,12 @@ public class SubscriptionController {
     }
 
     @GetMapping("/plans")
-    public SuccessResponse<List<SubscriptionPlanResponse>> listPlans() {
-        return SuccessResponse.ok("Subscription plans retrieved", subscriptionService.listPlans());
+    public SuccessResponse<List<SubscriptionPlanResponse>> legacyPlans() {
+        return SuccessResponse.ok("Subscription plans loaded", subscriptionService.legacyPlans());
     }
 
     @PostMapping("/checkout")
-    public SuccessResponse<CheckoutIntentResponse> createCheckoutIntent(
-            @RequestBody CheckoutIntentRequest request
-    ) {
-        return SuccessResponse.ok("Checkout intent created", subscriptionService.createCheckoutIntent(request));
+    public SuccessResponse<CheckoutIntentResponse> checkout(@Valid @RequestBody CheckoutIntentRequest request) {
+        return SuccessResponse.ok("Checkout created", subscriptionService.createCheckout(request));
     }
 }

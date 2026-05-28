@@ -4,14 +4,9 @@ import java.util.List;
 
 public record UserProgressSummaryResponse(
         String userId,
-        String displayName,
-        int level,
         int totalXp,
-        int currentStreakDays,
-        int longestStreakDays,
-        int nextLevelXp,
-        int completedLessons,
-        int completedAssessments,
+        int currentStreak,
+        int longestStreak,
         List<BadgeResponse> badges
 ) {
 }

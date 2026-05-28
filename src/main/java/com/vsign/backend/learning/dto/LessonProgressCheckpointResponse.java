@@ -4,7 +4,7 @@ public record LessonProgressCheckpointResponse(
         int completionPct,
         int lastPositionSeconds,
         String phase,
-        int currentQuestionIndex,
+        Integer currentQuestionIndex,
         String status
 ) {
 }

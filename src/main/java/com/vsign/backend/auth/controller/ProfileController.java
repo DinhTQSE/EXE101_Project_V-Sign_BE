@@ -1,16 +1,16 @@
 package com.vsign.backend.auth.controller;
 
+import com.vsign.backend.auth.dto.ChangePasswordRequest;
 import com.vsign.backend.auth.dto.ProfileResponse;
 import com.vsign.backend.auth.dto.UpdateProfileRequest;
 import com.vsign.backend.auth.service.ProfileService;
-import com.vsign.backend.common.exception.BusinessException;
-import com.vsign.backend.common.exception.ErrorCode;
 import com.vsign.backend.common.response.SuccessResponse;
-import com.vsign.backend.common.security.JwtAuthFilter;
-import jakarta.servlet.http.HttpServletRequest;
+import com.vsign.backend.common.security.JwtService;
 import jakarta.validation.Valid;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/me")
 public class ProfileController {
-
     private final ProfileService profileService;
 
     public ProfileController(ProfileService profileService) {
@@ -26,25 +25,24 @@ public class ProfileController {
     }
 
     @GetMapping
-    public SuccessResponse<ProfileResponse> getProfile(HttpServletRequest request) {
-        String email = authenticatedEmail(request);
-        return SuccessResponse.ok("Profile retrieved", profileService.getProfile(email));
+    public SuccessResponse<ProfileResponse> getProfile(@AuthenticationPrincipal JwtService.Principal principal) {
+        return SuccessResponse.ok("Profile loaded", profileService.getProfile(principal.email()));
     }
 
     @PatchMapping("/profile")
     public SuccessResponse<ProfileResponse> updateProfile(
-            HttpServletRequest request,
-            @Valid @RequestBody UpdateProfileRequest updateRequest
+            @AuthenticationPrincipal JwtService.Principal principal,
+            @Valid @RequestBody UpdateProfileRequest request
     ) {
-        String email = authenticatedEmail(request);
-        return SuccessResponse.ok("Profile updated", profileService.updateProfile(email, updateRequest));
+        return SuccessResponse.ok("Profile updated", profileService.updateProfile(principal.email(), request));
     }
 
-    private String authenticatedEmail(HttpServletRequest request) {
-        Object email = request.getAttribute(JwtAuthFilter.AUTH_EMAIL_ATTRIBUTE);
-        if (email == null) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED);
-        }
-        return email.toString();
+    @PostMapping("/change-password")
+    public SuccessResponse<Void> changePassword(
+            @AuthenticationPrincipal JwtService.Principal principal,
+            @Valid @RequestBody ChangePasswordRequest request
+    ) {
+        profileService.changePassword(principal.email(), request);
+        return SuccessResponse.ok("Password changed", null);
     }
 }

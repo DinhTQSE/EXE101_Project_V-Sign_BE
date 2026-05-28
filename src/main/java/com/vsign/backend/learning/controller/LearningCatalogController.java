@@ -6,57 +6,57 @@ import com.vsign.backend.learning.dto.LessonDetailResponse;
 import com.vsign.backend.learning.dto.LessonListResponse;
 import com.vsign.backend.learning.dto.ProgressResponse;
 import com.vsign.backend.learning.dto.UnitListResponse;
-import com.vsign.backend.learning.dto.UnitSearchRequest;
 import com.vsign.backend.learning.dto.UpdateProgressRequest;
 import com.vsign.backend.learning.service.LearningWorkflowService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Validated
 @RestController
-@RequestMapping("/api/v1")
 public class LearningCatalogController {
-
     private final LearningWorkflowService learningWorkflowService;
 
     public LearningCatalogController(LearningWorkflowService learningWorkflowService) {
         this.learningWorkflowService = learningWorkflowService;
     }
 
-    @GetMapping("/units")
+    @GetMapping("/api/v1/units")
     public SuccessResponse<UnitListResponse> listUnits(
-            @RequestParam(required = false) Boolean publishedOnly,
-            @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size
+            @RequestParam(defaultValue = "true") boolean publishedOnly,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size
     ) {
-        UnitSearchRequest request = new UnitSearchRequest(publishedOnly, page, size);
-        return SuccessResponse.ok("Learning units retrieved", learningWorkflowService.listUnits(request));
+        return SuccessResponse.ok("Units loaded", learningWorkflowService.listUnits(publishedOnly, page, size));
     }
 
-    @GetMapping("/units/{unitId}/chapters")
+    @GetMapping("/api/v1/units/{unitId}/chapters")
     public SuccessResponse<ChapterListResponse> listChapters(@PathVariable String unitId) {
-        return SuccessResponse.ok("Unit chapters retrieved", learningWorkflowService.listChapters(unitId));
+        return SuccessResponse.ok("Chapters loaded", learningWorkflowService.listChapters(unitId));
     }
 
-    @GetMapping("/chapters/{chapterId}/lessons")
+    @GetMapping("/api/v1/chapters/{chapterId}/lessons")
     public SuccessResponse<LessonListResponse> listLessons(@PathVariable String chapterId) {
-        return SuccessResponse.ok("Chapter lessons retrieved", learningWorkflowService.listLessons(chapterId));
+        return SuccessResponse.ok("Lessons loaded", learningWorkflowService.listLessons(chapterId));
     }
 
-    @GetMapping("/lessons/{lessonId}")
+    @GetMapping("/api/v1/lessons/{lessonId}")
     public SuccessResponse<LessonDetailResponse> getLesson(@PathVariable String lessonId) {
-        return SuccessResponse.ok("Lesson retrieved", learningWorkflowService.getLesson(lessonId));
+        return SuccessResponse.ok("Lesson loaded", learningWorkflowService.getLesson(lessonId));
     }
 
-    @PutMapping("/lessons/{lessonId}/progress")
+    @PutMapping("/api/v1/lessons/{lessonId}/progress")
     public SuccessResponse<ProgressResponse> updateProgress(
             @PathVariable String lessonId,
-            @RequestBody(required = false) UpdateProgressRequest request
+            @Valid @RequestBody UpdateProgressRequest request
     ) {
-        return SuccessResponse.ok("Lesson progress updated", learningWorkflowService.updateProgress(lessonId, request));
+        return SuccessResponse.ok("Progress updated", learningWorkflowService.updateProgress(lessonId, request));
     }
 }

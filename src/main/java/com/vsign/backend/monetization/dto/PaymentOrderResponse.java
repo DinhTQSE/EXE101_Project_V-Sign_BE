@@ -1,13 +1,18 @@
 package com.vsign.backend.monetization.dto;
 
-import java.time.Instant;
-
 public record PaymentOrderResponse(
         String transactionId,
+        String providerTransactionId,
         String provider,
-        String qrPayload,
-        String checkoutUrl,
-        Instant expiresAt,
-        String status
+        String planId,
+        String planType,
+        int amount,
+        String currency,
+        String status,
+        String qrCodeData,
+        String deepLink,
+        String expiresAt,
+        String qrCodeUrl,
+        int expiresInSeconds
 ) {
 }

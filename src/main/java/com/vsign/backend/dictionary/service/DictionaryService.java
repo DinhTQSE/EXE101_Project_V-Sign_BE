@@ -4,170 +4,113 @@ import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
 import com.vsign.backend.dictionary.dto.DictionaryEntryResponse;
 import com.vsign.backend.dictionary.dto.PracticeTargetResponse;
+import com.vsign.backend.dictionary.persistence.DictionaryEntryEntity;
+import com.vsign.backend.dictionary.persistence.DictionaryEntryRepository;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DictionaryService {
+    private final DictionaryEntryRepository dictionaryEntryRepository;
 
-    private static final List<DictionaryEntryResponse> ENTRIES = List.of(
-            new DictionaryEntryResponse("1", "Hello", "Raise hand and move outward", "greeting", 1),
-            new DictionaryEntryResponse("2", "Thank you", "Touch chin then move hand forward", "greeting", 1),
-            new DictionaryEntryResponse("3", "Hospital", "Form H-hands and tap twice", "place", 3),
-            new DictionaryEntryResponse("4", "School", "Clap flat hands together twice", "place", 2),
-            new DictionaryEntryResponse("5", "Water", "Tap W-hand near mouth", "daily", 1),
-            new DictionaryEntryResponse("6", "Yesterday", "Thumb from cheek backward", "time", 2)
-    );
+    public DictionaryService(DictionaryEntryRepository dictionaryEntryRepository) {
+        this.dictionaryEntryRepository = dictionaryEntryRepository;
+    }
 
-    private static final Map<String, PracticeTargetResponse> PRACTICE_TARGETS = Map.of(
-            "1", new PracticeTargetResponse(
-                    "1",
-                    "unit-greetings",
-                    "chapter-basic-greetings",
-                    "lesson-hello",
-                    "quiz-greetings-1",
-                    false
-            ),
-            "2", new PracticeTargetResponse(
-                    "2",
-                    "unit-greetings",
-                    "chapter-basic-greetings",
-                    "lesson-thank-you",
-                    "quiz-greetings-1",
-                    false
-            ),
-            "3", new PracticeTargetResponse(
-                    "3",
-                    "unit-places",
-                    "chapter-community-places",
-                    "lesson-hospital",
-                    "quiz-places-advanced",
-                    true
-            ),
-            "4", new PracticeTargetResponse(
-                    "4",
-                    "unit-places",
-                    "chapter-community-places",
-                    "lesson-school",
-                    "quiz-places-basic",
-                    false
-            ),
-            "5", new PracticeTargetResponse(
-                    "5",
-                    "unit-daily-life",
-                    "chapter-daily-needs",
-                    "lesson-water",
-                    "quiz-daily-1",
-                    false
-            ),
-            "6", new PracticeTargetResponse(
-                    "6",
-                    "unit-time",
-                    "chapter-past-present",
-                    "lesson-yesterday",
-                    "quiz-time-1",
-                    false
-            )
-    );
+    @Transactional(readOnly = true)
+    public DictionaryEntryPage list(String category, String keyword, String difficulty, int page, int size) {
+        String normalizedCategory = normalize(category);
+        String normalizedKeyword = normalize(keyword);
+        Integer difficultyLevel = normalizeDifficulty(difficulty);
 
-    public DictionaryEntryPage findEntries(
-            String category,
-            String keyword,
-            Integer difficulty,
-            int page,
-            int size
-    ) {
-        validateSearchRequest(category, keyword, difficulty, page, size);
-
-        List<DictionaryEntryResponse> filtered = ENTRIES.stream()
-                .filter(entry -> matchesCategory(entry, category))
-                .filter(entry -> matchesKeyword(entry, keyword))
-                .filter(entry -> matchesDifficulty(entry, difficulty))
+        List<DictionaryEntryResponse> filtered = dictionaryEntryRepository.findByPublishedTrue().stream()
+                .map(DictionaryService::toResponse)
+                .filter(entry -> normalizedCategory == null || entry.category().equalsIgnoreCase(normalizedCategory))
+                .filter(entry -> normalizedKeyword == null || entry.word().toLowerCase(Locale.ROOT).contains(normalizedKeyword))
+                .filter(entry -> difficultyLevel == null || entry.difficultyLevel() == difficultyLevel)
+                .sorted(Comparator.comparing(DictionaryEntryResponse::id))
                 .toList();
 
-        int totalPages = (int) Math.ceil((double) filtered.size() / size);
-        int fromIndex = page * size;
-        if (fromIndex >= filtered.size()) {
-            return new DictionaryEntryPage(List.of(), page, size, filtered.size(), totalPages);
-        }
+        int totalElements = filtered.size();
+        int totalPages = totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / size);
+        int from = Math.min(page * size, totalElements);
+        int to = Math.min(from + size, totalElements);
+        List<DictionaryEntryResponse> items = filtered.subList(from, to);
+        return new DictionaryEntryPage(items, page, size, totalElements, totalElements, totalPages, items);
+    }
 
-        int toIndex = Math.min(fromIndex + size, filtered.size());
-        return new DictionaryEntryPage(
-                filtered.subList(fromIndex, toIndex),
-                page,
-                size,
-                filtered.size(),
-                totalPages
+    @Transactional(readOnly = true)
+    public PracticeTargetResponse practiceTarget(String entryId) {
+        Integer parsedEntryId = parseEntryId(entryId);
+        DictionaryEntryEntity entry = dictionaryEntryRepository.findById(parsedEntryId)
+                .filter(DictionaryEntryEntity::isPublished)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        return new PracticeTargetResponse(
+                entry.getId(),
+                101,
+                entry.getWord(),
+                false,
+                "unit-greetings",
+                "chapter-basic-greetings",
+                "lesson-hello",
+                "quiz-greetings-1"
         );
     }
 
-    public PracticeTargetResponse findPracticeTarget(String entryId) {
-        if (entryId == null || entryId.isBlank()) {
-            throw validation("entryId is required");
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
         }
-
-        PracticeTargetResponse target = PRACTICE_TARGETS.get(entryId.trim());
-        if (target == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Dictionary entry was not found");
-        }
-
-        return target;
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
-    private void validateSearchRequest(
-            String category,
-            String keyword,
-            Integer difficulty,
-            int page,
-            int size
-    ) {
-        if (keyword != null && keyword.trim().length() > 100) {
-            throw validation("keyword must be 100 characters or fewer");
+    private Integer normalizeDifficulty(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) {
+            return null;
         }
-        if (page < 0) {
-            throw validation("page must be greater than or equal to 0");
-        }
-        if (size < 1 || size > 100) {
-            throw validation("size must be between 1 and 100");
-        }
-        if (difficulty != null && (difficulty < 1 || difficulty > 3)) {
-            throw validation("difficulty must be between 1 and 3");
-        }
-        if (category != null && !category.isBlank() && ENTRIES.stream().noneMatch(entry -> matchesCategory(entry, category))) {
-            throw validation("category is not supported");
+        return switch (normalized.toUpperCase(Locale.ROOT)) {
+            case "1", "CO_BAN" -> 1;
+            case "2", "TRUNG_BINH" -> 2;
+            case "3", "NANG_CAO" -> 3;
+            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        };
+    }
+
+    private Integer parseEntryId(String value) {
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException exception) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
         }
     }
 
-    private BusinessException validation(String message) {
-        return new BusinessException(ErrorCode.VALIDATION_ERROR, message);
-    }
-
-    private boolean matchesCategory(DictionaryEntryResponse entry, String category) {
-        return category == null || category.isBlank()
-                || entry.category().equalsIgnoreCase(category.trim());
-    }
-
-    private boolean matchesKeyword(DictionaryEntryResponse entry, String keyword) {
-        if (keyword == null || keyword.isBlank()) {
-            return true;
-        }
-        String normalized = keyword.toLowerCase(Locale.ROOT).trim();
-        return entry.keyword().toLowerCase(Locale.ROOT).contains(normalized)
-                || entry.definition().toLowerCase(Locale.ROOT).contains(normalized);
-    }
-
-    private boolean matchesDifficulty(DictionaryEntryResponse entry, Integer difficulty) {
-        return difficulty == null || difficulty.equals(entry.difficulty());
+    private static DictionaryEntryResponse toResponse(DictionaryEntryEntity entry) {
+        return new DictionaryEntryResponse(
+                entry.getId(),
+                String.valueOf(entry.getId()),
+                entry.getWord(),
+                entry.getWord(),
+                entry.getCategory(),
+                entry.getDifficulty(),
+                entry.getDifficultyLevel(),
+                entry.getDescription(),
+                entry.getVideoUrl(),
+                entry.getThumbnailUrl()
+        );
     }
 
     public record DictionaryEntryPage(
-            List<DictionaryEntryResponse> content,
+            List<DictionaryEntryResponse> items,
             int page,
             int size,
+            int total,
             int totalElements,
-            int totalPages
+            int totalPages,
+            List<DictionaryEntryResponse> content
     ) {
     }
 }

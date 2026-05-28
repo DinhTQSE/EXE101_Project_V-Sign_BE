@@ -5,70 +5,96 @@ import com.vsign.backend.common.exception.ErrorCode;
 import com.vsign.backend.monetization.dto.CreatePaymentOrderRequest;
 import com.vsign.backend.monetization.dto.PaymentOrderResponse;
 import com.vsign.backend.monetization.dto.PaymentStatusResponse;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Map;
+import com.vsign.backend.monetization.persistence.PaymentOrderEntity;
+import com.vsign.backend.monetization.persistence.PaymentOrderRepository;
+import com.vsign.backend.monetization.persistence.SubscriptionPlanEntity;
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class PaymentService {
+    private final SubscriptionService subscriptionService;
+    private final PaymentOrderRepository paymentOrderRepository;
 
-    private static final Map<String, BigDecimal> PLAN_PRICE = Map.of(
-            "pro-monthly", BigDecimal.valueOf(99000),
-            "school-monthly", BigDecimal.valueOf(499000)
-    );
+    public PaymentService(SubscriptionService subscriptionService, PaymentOrderRepository paymentOrderRepository) {
+        this.subscriptionService = subscriptionService;
+        this.paymentOrderRepository = paymentOrderRepository;
+    }
 
-    private final Map<String, PaymentStatusResponse> statuses = new ConcurrentHashMap<>();
-
+    @Transactional
     public PaymentOrderResponse createOrder(CreatePaymentOrderRequest request) {
-        if (request == null || isBlank(request.provider()) || isBlank(request.planId()) || request.amount() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "provider, planId and amount are required");
-        }
-
-        if (!"MOMO".equals(request.provider()) && !"ZALOPAY".equals(request.provider())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Unsupported payment provider");
-        }
-
-        BigDecimal expectedAmount = PLAN_PRICE.get(request.planId());
-        if (expectedAmount == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Subscription plan not found");
-        }
-
-        if (request.amount().compareTo(expectedAmount) != 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Amount does not match plan price");
-        }
-
-        String transactionId = "tx_" + UUID.randomUUID().toString().replace("-", "");
-        PaymentStatusResponse status = new PaymentStatusResponse(
+        SubscriptionPlanEntity plan = request.planId() != null && !request.planId().isBlank()
+                ? subscriptionService.requirePlanEntity(request.planId())
+                : subscriptionService.requirePlanEntityByType(request.planType());
+        int amount = request.amount() == null ? plan.getPrice() : request.amount();
+        String transactionId = "txn-" + UUID.randomUUID();
+        String providerTransactionId = request.provider() + "-" + UUID.randomUUID();
+        OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(5);
+        PaymentOrderEntity order = paymentOrderRepository.save(new PaymentOrderEntity(
                 transactionId,
-                "PENDING",
-                "AWAITING_PAYMENT",
-                true,
-                "Waiting for payment confirmation"
-        );
-        statuses.put(transactionId, status);
-
-        return new PaymentOrderResponse(
-                transactionId,
+                providerTransactionId,
                 request.provider(),
-                "MOCKQR:" + transactionId,
-                "https://payments.v-sign.test/redirect/" + transactionId,
-                Instant.now().plusSeconds(900),
-                status.status()
+                plan.getPlanId(),
+                plan.getPlanType(),
+                amount,
+                plan.getCurrency(),
+                "PENDING",
+                "VSIGN|" + request.provider() + "|" + plan.getPlanType() + "|" + transactionId + "|" + amount,
+                request.provider().toLowerCase() + "://payment/" + transactionId,
+                expiresAt,
+                "https://pay.vsign.test/qr/" + transactionId,
+                300,
+                true,
+                null
+        ));
+        return toOrderResponse(order);
+    }
+
+    public PaymentStatusResponse status(String transactionId) {
+        return paymentOrderRepository.findById(transactionId)
+                .map(this::toStatusResponse)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    public List<PaymentStatusResponse> history(String email) {
+        return paymentOrderRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(this::toStatusResponse)
+                .toList();
+    }
+
+    private PaymentOrderResponse toOrderResponse(PaymentOrderEntity order) {
+        return new PaymentOrderResponse(
+                order.getTransactionId(),
+                order.getProviderTransactionId(),
+                order.getProvider(),
+                order.getPlanId(),
+                order.getPlanType(),
+                order.getAmount(),
+                order.getCurrency(),
+                order.getStatus(),
+                order.getQrCodeData(),
+                order.getDeepLink(),
+                order.getExpiresAt().toString(),
+                order.getQrCodeUrl(),
+                order.getExpiresInSeconds()
         );
     }
 
-    public PaymentStatusResponse getStatus(String transactionId) {
-        PaymentStatusResponse status = statuses.get(transactionId);
-        if (status == null) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "Transaction not found");
-        }
-        return status;
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
+    private PaymentStatusResponse toStatusResponse(PaymentOrderEntity order) {
+        return new PaymentStatusResponse(
+                order.getTransactionId(),
+                order.getProviderTransactionId(),
+                order.getProvider(),
+                order.getPlanType(),
+                order.getAmount(),
+                order.getCurrency(),
+                order.getStatus(),
+                order.getCreatedAt().toString(),
+                order.isRetryable()
+        );
     }
 }

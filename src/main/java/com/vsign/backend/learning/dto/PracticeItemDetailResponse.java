@@ -5,11 +5,12 @@ import java.util.List;
 public record PracticeItemDetailResponse(
         String itemId,
         String lessonId,
-        String title,
+        String label,
         String category,
         String level,
         String expectedGloss,
-        String prompt,
+        String sourceVideoFile,
+        String videoUrl,
         List<String> rubric
 ) {
 }

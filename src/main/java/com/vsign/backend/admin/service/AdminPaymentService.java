@@ -6,87 +6,101 @@ import com.vsign.backend.admin.dto.AdminPaymentRecordResponse;
 import com.vsign.backend.admin.dto.ManualPaymentStatusRequest;
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
-import java.time.Instant;
-import java.util.ArrayList;
+import com.vsign.backend.monetization.persistence.PaymentOrderEntity;
+import com.vsign.backend.monetization.persistence.PaymentOrderRepository;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class AdminPaymentService {
-
-    private final List<AdminPaymentRecordResponse> payments = new ArrayList<>(List.of(
-            new AdminPaymentRecordResponse("txn-1001", "user-1001", "MOMO", "PENDING", 199000, "2026-05-20T10:00:00Z", "2026-05-20T10:00:00Z"),
-            new AdminPaymentRecordResponse("txn-1002", "user-1002", "ZALOPAY", "PAID", 199000, "2026-05-19T10:00:00Z", "2026-05-19T10:03:00Z"),
-            new AdminPaymentRecordResponse("txn-1003", "user-1003", "MOMO", "FAILED", 199000, "2026-05-18T10:00:00Z", "2026-05-18T10:05:00Z")
-    ));
-
     private final AdminAuditService auditService;
+    private final PaymentOrderRepository paymentOrderRepository;
 
-    public AdminPaymentService(AdminAuditService auditService) {
+    public AdminPaymentService(AdminAuditService auditService, PaymentOrderRepository paymentOrderRepository) {
         this.auditService = auditService;
+        this.paymentOrderRepository = paymentOrderRepository;
     }
 
-    public AdminPaymentPageResponse listPayments(String requesterRole, Integer page, Integer size) {
-        requireAdminRole(requesterRole);
-        int resolvedPage = page == null ? 0 : page;
-        int resolvedSize = size == null ? 20 : size;
-        if (resolvedPage < 0 || resolvedSize <= 0 || resolvedSize > 100) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "page or size is invalid");
-        }
-        int from = Math.min(resolvedPage * resolvedSize, payments.size());
-        int to = Math.min(from + resolvedSize, payments.size());
-        return new AdminPaymentPageResponse(resolvedPage, resolvedSize, payments.size(), payments.subList(from, to));
+    public AdminPaymentPageResponse listPayments(int page, int size) {
+        int normalizedPage = Math.max(0, page);
+        int normalizedSize = Math.max(1, size);
+        List<AdminPaymentRecordResponse> all = paymentOrderRepository.findAll().stream()
+                .sorted(Comparator.comparing(PaymentOrderEntity::getTransactionId))
+                .map(this::toResponse)
+                .toList();
+        List<AdminPaymentRecordResponse> pageItems = all.stream()
+                .skip((long) normalizedPage * normalizedSize)
+                .limit(normalizedSize)
+                .toList();
+        int totalPages = (int) Math.ceil((double) all.size() / normalizedSize);
+        return new AdminPaymentPageResponse(pageItems, normalizedPage, normalizedSize, all.size(), totalPages);
     }
 
+    @Transactional
     public AdminPaymentRecordResponse overrideStatus(
-            String requesterRole,
-            String actorEmail,
             String transactionId,
-            ManualPaymentStatusRequest request
+            ManualPaymentStatusRequest request,
+            String actorEmail
     ) {
-        requireAdminRole(requesterRole);
-        String status = request.status().trim().toUpperCase();
-        if (!status.equals("PENDING") && !status.equals("PAID") && !status.equals("FAILED") && !status.equals("EXPIRED")) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "status must be PENDING, PAID, FAILED, or EXPIRED");
-        }
-        String reason = request.reason().trim();
-        if (reason.length() < 5) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "reason must contain at least 5 characters");
-        }
-
-        for (int i = 0; i < payments.size(); i++) {
-            AdminPaymentRecordResponse existing = payments.get(i);
-            if (existing.transactionId().equals(transactionId)) {
-                AdminPaymentRecordResponse updated = new AdminPaymentRecordResponse(
-                        existing.transactionId(),
-                        existing.userId(),
-                        existing.provider(),
-                        status,
-                        existing.amountVnd(),
-                        existing.createdAt(),
-                        Instant.now().toString()
-                );
-                payments.set(i, updated);
-                auditService.log(actorEmail, "PAYMENT_STATUS_OVERRIDE", transactionId, reason);
-                return updated;
-            }
-        }
-        throw new BusinessException(ErrorCode.NOT_FOUND, "Payment transaction not found");
+        PaymentOrderEntity current = paymentOrderRepository.findById(transactionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        String status = normalizeStatus(request.status());
+        current.overrideStatus(status, request.reason());
+        PaymentOrderEntity updated = paymentOrderRepository.save(current);
+        auditService.recordAction(actorEmail, "PAYMENT_STATUS_OVERRIDE", "PAYMENT", transactionId, request.reason());
+        return toResponse(updated);
     }
 
-    public AdminKpiResponse getKpis(String requesterRole, String fromDate, String toDate) {
-        requireAdminRole(requesterRole);
-        long revenue = payments.stream()
-                .filter(payment -> payment.status().equals("PAID"))
-                .mapToLong(AdminPaymentRecordResponse::amountVnd)
+    public AdminKpiResponse kpis(
+            LocalDate fromDate,
+            LocalDate toDate,
+            int activeUsers,
+            int premiumUsers,
+            int pendingReviews
+    ) {
+        List<PaymentOrderEntity> successfulPayments = paymentOrderRepository.findAll().stream()
+                .filter(payment -> "PAID".equals(payment.getStatus()))
+                .filter(payment -> withinRange(payment.getCreatedAt(), fromDate, toDate))
+                .toList();
+        long revenue = successfulPayments.stream()
+                .mapToLong(PaymentOrderEntity::getAmount)
                 .sum();
-        int successCount = (int) payments.stream().filter(payment -> payment.status().equals("PAID")).count();
-        return new AdminKpiResponse(fromDate, toDate, 4, 2, revenue, successCount);
+        return new AdminKpiResponse(successfulPayments.size(), revenue, activeUsers, premiumUsers, pendingReviews);
     }
 
-    private static void requireAdminRole(String role) {
-        if (role == null || !role.equalsIgnoreCase("ADMIN")) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "ADMIN role is required");
-        }
+    private boolean withinRange(OffsetDateTime createdAt, LocalDate fromDate, LocalDate toDate) {
+        LocalDate createdDate = createdAt.toLocalDate();
+        boolean afterStart = fromDate == null || !createdDate.isBefore(fromDate);
+        boolean beforeEnd = toDate == null || !createdDate.isAfter(toDate);
+        return afterStart && beforeEnd;
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = status.toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "PENDING", "PAID", "FAILED", "CANCELED", "REFUNDED" -> normalized;
+            default -> throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+        };
+    }
+
+    private AdminPaymentRecordResponse toResponse(PaymentOrderEntity payment) {
+        return new AdminPaymentRecordResponse(
+                payment.getTransactionId(),
+                payment.getUserEmail(),
+                payment.getPlanId(),
+                payment.getAmount(),
+                payment.getCurrency(),
+                payment.getStatus(),
+                payment.getProvider(),
+                payment.getCreatedAt().toString(),
+                payment.getUpdatedAt().toString(),
+                payment.getManualReason()
+        );
     }
 }

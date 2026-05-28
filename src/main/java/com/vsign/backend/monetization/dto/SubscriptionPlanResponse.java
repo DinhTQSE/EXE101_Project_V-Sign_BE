@@ -1,14 +1,13 @@
 package com.vsign.backend.monetization.dto;
 
-import java.math.BigDecimal;
-import java.util.List;
-
 public record SubscriptionPlanResponse(
         String planId,
-        String displayName,
-        BigDecimal monthlyPrice,
+        String planType,
+        String name,
+        int amount,
+        int price,
         String currency,
-        int maxUploadsPerMonth,
-        List<String> features
+        int durationDays,
+        boolean active
 ) {
 }

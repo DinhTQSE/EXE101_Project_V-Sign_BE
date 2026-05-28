@@ -4,11 +4,13 @@ import java.util.List;
 
 public record SignatureAttemptResponse(
         String attemptId,
-        String userStoryId,
         String practiceItemId,
-        String documentUploadId,
         String status,
         int score,
+        String targetGloss,
+        String predictedGloss,
+        Double confidence,
+        Boolean correct,
         List<String> feedbackCodes
 ) {
 }

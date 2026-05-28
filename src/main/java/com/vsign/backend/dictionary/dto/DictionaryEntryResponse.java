@@ -1,10 +1,15 @@
 package com.vsign.backend.dictionary.dto;
 
 public record DictionaryEntryResponse(
-        String id,
+        int id,
+        String entryId,
+        String word,
         String keyword,
-        String definition,
         String category,
-        Integer difficulty
+        String difficulty,
+        int difficultyLevel,
+        String description,
+        String videoUrl,
+        String thumbnailUrl
 ) {
 }

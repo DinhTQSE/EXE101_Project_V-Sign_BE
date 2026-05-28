@@ -1,16 +1,22 @@
 package com.vsign.backend.auth.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import org.hibernate.validator.constraints.URL;
 
 public record UpdateProfileRequest(
-        @NotBlank
         @Size(max = 120)
         String fullName,
 
-        @URL
-        @Size(max = 500)
-        String avatarUrl
+        @Size(max = 120)
+        String displayName,
+
+        @Pattern(regexp = "^$|^https?://.+", message = "Avatar URL must be an HTTP(S) URL")
+        String avatarUrl,
+
+        @Size(max = 300)
+        String bio
 ) {
+    public String resolvedName() {
+        return displayName != null ? displayName : fullName;
+    }
 }

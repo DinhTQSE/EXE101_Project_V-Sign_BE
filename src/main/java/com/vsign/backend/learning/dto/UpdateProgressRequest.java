@@ -1,10 +1,18 @@
 package com.vsign.backend.learning.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 public record UpdateProgressRequest(
-        Integer completionPct,
-        Integer lastPositionSeconds,
+        @Min(0)
+        @Max(100)
+        int completionPct,
+
+        @Min(0)
+        int lastPositionSeconds,
+
         String phase,
         Integer currentQuestionIndex,
-        String status
+        ProgressStatus status
 ) {
 }

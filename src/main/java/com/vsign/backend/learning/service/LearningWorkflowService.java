@@ -1,7 +1,9 @@
 package com.vsign.backend.learning.service;
 
+import com.vsign.backend.auth.persistence.UserRepository;
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
+import com.vsign.backend.common.security.JwtService;
 import com.vsign.backend.learning.dto.ChapterListResponse;
 import com.vsign.backend.learning.dto.ChapterSummaryResponse;
 import com.vsign.backend.learning.dto.LessonDetailResponse;
@@ -11,386 +13,440 @@ import com.vsign.backend.learning.dto.LessonSummaryResponse;
 import com.vsign.backend.learning.dto.PracticeItemDetailResponse;
 import com.vsign.backend.learning.dto.PracticeItemSummaryResponse;
 import com.vsign.backend.learning.dto.PracticeItemsPageResponse;
-import com.vsign.backend.learning.dto.ProgressStatus;
 import com.vsign.backend.learning.dto.ProgressResponse;
 import com.vsign.backend.learning.dto.SignatureAttemptResponse;
 import com.vsign.backend.learning.dto.SubmitSignatureAttemptRequest;
 import com.vsign.backend.learning.dto.UnitListResponse;
 import com.vsign.backend.learning.dto.UnitSummaryResponse;
-import com.vsign.backend.learning.dto.UnitSearchRequest;
 import com.vsign.backend.learning.dto.UpdateProgressRequest;
+import com.vsign.backend.learning.persistence.LearningChapterEntity;
+import com.vsign.backend.learning.persistence.LearningChapterRepository;
+import com.vsign.backend.learning.persistence.LearningLessonEntity;
+import com.vsign.backend.learning.persistence.LearningLessonRepository;
+import com.vsign.backend.learning.persistence.LearningUnitEntity;
+import com.vsign.backend.learning.persistence.LearningUnitRepository;
+import com.vsign.backend.learning.persistence.LessonProgressEntity;
+import com.vsign.backend.learning.persistence.LessonProgressRepository;
+import com.vsign.backend.learning.persistence.PracticeItemEntity;
+import com.vsign.backend.learning.persistence.PracticeItemRepository;
+import com.vsign.backend.learning.persistence.PracticeItemRubricEntity;
+import com.vsign.backend.learning.persistence.PracticeItemRubricRepository;
+import com.vsign.backend.learning.persistence.SignatureAttemptLogEntity;
+import com.vsign.backend.learning.persistence.SignatureAttemptLogRepository;
+import com.vsign.backend.monetization.persistence.UserSubscriptionRepository;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class LearningWorkflowService {
+    private static final String ANONYMOUS_USER_KEY = "anonymous";
 
-    private static final List<PracticeItemDetailResponse> PRACTICE_ITEMS = List.of(
-            new PracticeItemDetailResponse(
-                    "practice-hello",
-                    "lesson-greetings-1",
-                    "Say Hello",
-                    "greeting",
-                    "beginner",
-                    "HELLO",
-                    "Raise your dominant hand and move it outward from the forehead.",
-                    List.of("HAND_SHAPE_MATCH", "MOVEMENT_DIRECTION", "FACE_ORIENTATION")
-            ),
-            new PracticeItemDetailResponse(
-                    "practice-thank-you",
-                    "lesson-greetings-1",
-                    "Say Thank You",
-                    "greeting",
-                    "beginner",
-                    "THANK_YOU",
-                    "Touch your chin with a flat hand and move the hand forward.",
-                    List.of("HAND_SHAPE_MATCH", "START_POSITION", "MOVEMENT_FLUENCY")
-            ),
-            new PracticeItemDetailResponse(
-                    "practice-school",
-                    "lesson-places-1",
-                    "Sign School",
-                    "place",
-                    "intermediate",
-                    "SCHOOL",
-                    "Clap both flat hands together twice with steady rhythm.",
-                    List.of("BOTH_HANDS_VISIBLE", "CONTACT_TIMING", "REPETITION_COUNT")
-            )
-    );
+    private final PracticeItemRepository practiceItemRepository;
+    private final PracticeItemRubricRepository rubricRepository;
+    private final LearningUnitRepository unitRepository;
+    private final LearningChapterRepository chapterRepository;
+    private final LearningLessonRepository lessonRepository;
+    private final LessonProgressRepository progressRepository;
+    private final SignatureAttemptLogRepository signatureAttemptLogRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
+    private final UserRepository userRepository;
 
-    private static final List<UnitRecord> UNITS = List.of(
-            new UnitRecord(new UnitSummaryResponse(
-                    "unit-basics",
-                    "V-Sign Basics",
-                    "https://cdn.vsign.test/units/basics.png",
-                    2,
-                    1
-            ), true),
-            new UnitRecord(new UnitSummaryResponse(
-                    "unit-everyday",
-                    "Everyday Conversations",
-                    "https://cdn.vsign.test/units/everyday.png",
-                    1,
-                    2
-            ), true)
-    );
-
-    private static final List<ChapterRecord> CHAPTERS = List.of(
-            new ChapterRecord("chapter-greetings", "unit-basics", "Greetings", 1, false, false, 58),
-            new ChapterRecord("chapter-places", "unit-basics", "Places", 2, true, true, 0),
-            new ChapterRecord("chapter-family", "unit-everyday", "Family", 1, false, false, 12)
-    );
-
-    private static final List<LessonRecord> LESSONS = List.of(
-            new LessonRecord("lesson-greetings-1", "chapter-greetings", "Hello and Thank You", 1, 360,
-                    false, false, "IN_PROGRESS", 35, "https://cdn.vsign.test/lessons/greetings-1.m3u8"),
-            new LessonRecord("lesson-greetings-2", "chapter-greetings", "Meet and Introduce", 2, 420,
-                    false, true, "LOCKED", 0, "https://cdn.vsign.test/lessons/greetings-2.m3u8"),
-            new LessonRecord("lesson-places-1", "chapter-places", "School and Home", 1, 390,
-                    true, true, "LOCKED", 0, "https://cdn.vsign.test/lessons/places-1.m3u8"),
-            new LessonRecord("lesson-family-1", "chapter-family", "Family Members", 1, 410,
-                    false, false, "NOT_STARTED", 0, "https://cdn.vsign.test/lessons/family-1.m3u8")
-    );
+    public LearningWorkflowService(
+            PracticeItemRepository practiceItemRepository,
+            PracticeItemRubricRepository rubricRepository,
+            LearningUnitRepository unitRepository,
+            LearningChapterRepository chapterRepository,
+            LearningLessonRepository lessonRepository,
+            LessonProgressRepository progressRepository,
+            SignatureAttemptLogRepository signatureAttemptLogRepository,
+            UserSubscriptionRepository userSubscriptionRepository,
+            UserRepository userRepository
+    ) {
+        this.practiceItemRepository = practiceItemRepository;
+        this.rubricRepository = rubricRepository;
+        this.unitRepository = unitRepository;
+        this.chapterRepository = chapterRepository;
+        this.lessonRepository = lessonRepository;
+        this.progressRepository = progressRepository;
+        this.signatureAttemptLogRepository = signatureAttemptLogRepository;
+        this.userSubscriptionRepository = userSubscriptionRepository;
+        this.userRepository = userRepository;
+    }
 
     public PracticeItemsPageResponse listPracticeItems(String category, String level, int page, int size) {
-        int normalizedPage = Math.max(page, 0);
-        int normalizedSize = size <= 0 ? 10 : size;
-
-        List<PracticeItemSummaryResponse> filtered = PRACTICE_ITEMS.stream()
-                .filter(item -> matches(item.category(), category))
-                .filter(item -> matches(item.level(), level))
-                .map(this::toSummary)
+        String normalizedCategory = normalize(category);
+        String normalizedLevel = normalize(level);
+        List<PracticeItemSummaryResponse> filtered = practiceItemRepository.findByPublishedTrueOrderByOrderIndexAsc().stream()
+                .filter(item -> normalizedCategory == null || item.getCategory().equalsIgnoreCase(normalizedCategory))
+                .filter(item -> normalizedLevel == null || item.getLevel().equalsIgnoreCase(normalizedLevel))
+                .map(this::toPracticeSummary)
                 .toList();
-
-        int totalPages = pageCount(filtered.size(), normalizedSize);
-        int fromIndex = normalizedPage * normalizedSize;
-        if (fromIndex >= filtered.size()) {
-            return new PracticeItemsPageResponse(List.of(), normalizedPage, normalizedSize, filtered.size(), totalPages);
-        }
-
-        int toIndex = Math.min(fromIndex + normalizedSize, filtered.size());
-        return new PracticeItemsPageResponse(
-                filtered.subList(fromIndex, toIndex),
-                normalizedPage,
-                normalizedSize,
-                filtered.size(),
-                totalPages
-        );
+        int total = filtered.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / size);
+        int from = Math.min(page * size, total);
+        int to = Math.min(from + size, total);
+        return new PracticeItemsPageResponse(page, size, total, totalPages, filtered.subList(from, to));
     }
 
     public PracticeItemDetailResponse getPracticeItem(String itemId) {
-        return PRACTICE_ITEMS.stream()
-                .filter(item -> item.itemId().equals(itemId))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "Practice item not found: " + itemId));
+        PracticeItemEntity item = practiceItemRepository.findByPracticeItemIdAndPublishedTrue(itemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        List<String> rubric = rubricRepository.findByPracticeItemIdOrderByOrderIndexAsc(itemId).stream()
+                .map(PracticeItemRubricEntity::getCode)
+                .toList();
+        return new PracticeItemDetailResponse(
+                item.getPracticeItemId(),
+                item.getLessonId(),
+                item.getLabel(),
+                item.getCategory(),
+                item.getLevel(),
+                item.getExpectedGloss(),
+                item.getSourceVideoFile(),
+                item.getVideoUrl(),
+                rubric
+        );
     }
 
-    public SignatureAttemptResponse submitAttempt(SubmitSignatureAttemptRequest request) {
-        validateAttempt(request);
-        PracticeItemDetailResponse item = getPracticeItem(request.practiceItemId().trim());
-        String attemptId = UUID.nameUUIDFromBytes((request.practiceItemId() + ':' + request.signatureVector())
-                .getBytes(StandardCharsets.UTF_8)).toString();
-
+    @Transactional
+    public SignatureAttemptResponse submitSignatureAttempt(SubmitSignatureAttemptRequest request) {
+        PracticeItemEntity practiceItem = practiceItemRepository.findByPracticeItemIdAndPublishedTrue(request.practiceItemId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        String attemptId = "attempt-" + UUID.randomUUID();
+        String targetGloss = firstNonBlank(request.targetGloss(), practiceItem.getExpectedGloss());
+        String predictedGloss = normalizeGloss(request.predictedGloss());
+        boolean hasPrediction = predictedGloss != null || request.confidence() != null || request.aiStatus() != null;
+        Boolean correct = hasPrediction
+                ? (request.correct() != null
+                        ? request.correct()
+                        : predictedGloss != null && normalizeGloss(targetGloss) != null && predictedGloss.equals(normalizeGloss(targetGloss)))
+                : null;
+        int score = hasPrediction ? scoreFromConfidence(request.confidence(), Boolean.TRUE.equals(correct)) : 86;
+        String status = hasPrediction ? (Boolean.TRUE.equals(correct) && score >= 70 ? "PASSED" : "RETRY_REQUIRED") : "SUBMITTED";
+        List<String> feedbackCodes = feedbackCodes(request.aiStatus(), correct, request.confidence());
+        signatureAttemptLogRepository.save(new SignatureAttemptLogEntity(
+                attemptId,
+                currentUserKey(),
+                request.practiceItemId(),
+                request.userStoryId(),
+                request.documentUploadId(),
+                sha256Hex(request.signatureVector()),
+                request.durationMs(),
+                normalizeGloss(request.aiStatus()),
+                normalizeGloss(targetGloss),
+                predictedGloss,
+                request.confidence(),
+                correct,
+                request.framesProcessed(),
+                request.handsDetectedFrames(),
+                request.inferenceMs(),
+                status,
+                score,
+                String.join(",", feedbackCodes)
+        ));
         return new SignatureAttemptResponse(
                 attemptId,
-                blankToDefault(request.userStoryId(), "US-LRN-003"),
-                item.itemId(),
-                request.documentUploadId().trim(),
-                "SUBMITTED",
-                scoreFor(request.signatureVector()),
-                List.of(item.rubric().get(0), "REVIEW_READY")
+                request.practiceItemId(),
+                status,
+                score,
+                normalizeGloss(targetGloss),
+                predictedGloss,
+                request.confidence(),
+                correct,
+                feedbackCodes
         );
     }
 
-    public UnitListResponse listUnits(UnitSearchRequest request) {
-        UnitSearchRequest normalized = request == null ? new UnitSearchRequest(true, 0, 10) : request;
-        int page = normalized.page() == null ? 0 : normalized.page();
-        int size = normalized.size() == null ? 10 : normalized.size();
-        validateUnitSearch(page, size);
-
-        boolean publishedOnly = normalized.publishedOnly() == null || normalized.publishedOnly();
-        List<UnitSummaryResponse> filtered = UNITS.stream()
-                .filter(unit -> !publishedOnly || unit.published())
-                .map(UnitRecord::summary)
+    public UnitListResponse listUnits(boolean publishedOnly, int page, int size) {
+        List<LearningUnitEntity> units = publishedOnly
+                ? unitRepository.findByPublishedTrueOrderByOrderIndexAsc()
+                : unitRepository.findAllByOrderByOrderIndexAsc();
+        // One GROUP BY query instead of one COUNT per unit
+        Map<String, Long> chapterCountByUnit = chapterRepository.countPublishedGroupByUnitId().stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
+        List<UnitSummaryResponse> summaries = units.stream()
+                .map(unit -> new UnitSummaryResponse(
+                        unit.getUnitId(),
+                        unit.getTitle(),
+                        unit.getDescription(),
+                        unit.getThumbnailUrl(),
+                        chapterCountByUnit.getOrDefault(unit.getUnitId(), 0L).intValue(),
+                        unit.getOrderIndex()
+                ))
                 .toList();
-        int fromIndex = page * size;
-        int totalPages = pageCount(filtered.size(), size);
-        if (fromIndex >= filtered.size()) {
-            return new UnitListResponse(List.of(), page, size, filtered.size(), totalPages);
-        }
-
-        int toIndex = Math.min(fromIndex + size, filtered.size());
-        return new UnitListResponse(
-                filtered.subList(fromIndex, toIndex),
-                page,
-                size,
-                filtered.size(),
-                totalPages
-        );
+        int total = summaries.size();
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / size);
+        int from = Math.min(page * size, total);
+        int to = Math.min(from + size, total);
+        return new UnitListResponse(page, size, total, totalPages, summaries.subList(from, to));
     }
 
     public ChapterListResponse listChapters(String unitId) {
-        findUnit(unitId);
-        List<ChapterSummaryResponse> chapters = CHAPTERS.stream()
-                .filter(chapter -> chapter.unitId().equals(unitId))
-                .map(chapter -> new ChapterSummaryResponse(
-                        chapter.chapterId(),
-                        chapter.title(),
-                        chapter.orderIndex(),
-                        countLessons(chapter.chapterId()),
-                        chapter.requiresPremium(),
-                        chapter.locked(),
-                        chapter.progressPct()
-                ))
+        unitRepository.findById(unitId)
+                .filter(LearningUnitEntity::isPublished)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNIT_NOT_FOUND));
+
+        String userKey = currentUserKey();
+        boolean premiumUser = isPremiumUser();
+
+        List<LearningChapterEntity> chapterEntities =
+                chapterRepository.findByUnitIdAndPublishedTrueOrderByOrderIndexAsc(unitId);
+        List<String> chapterIds = chapterEntities.stream()
+                .map(LearningChapterEntity::getChapterId).toList();
+
+        // Batch lesson counts (1 query instead of N)
+        Map<String, Long> lessonCountByChapter = lessonRepository.countPublishedByChapterIdIn(chapterIds).stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> (Long) row[1]));
+
+        // Batch all lessons + all progress for completion calc (2 queries instead of 2N)
+        List<LearningLessonEntity> allLessons = lessonRepository.findPublishedByChapterIdIn(chapterIds);
+        Map<String, List<LearningLessonEntity>> lessonsByChapter = allLessons.stream()
+                .collect(Collectors.groupingBy(LearningLessonEntity::getChapterId));
+        List<String> allLessonIds = allLessons.stream().map(LearningLessonEntity::getLessonId).toList();
+        Map<String, LessonProgressEntity> progressByLesson = allLessonIds.isEmpty() ? Map.of() :
+                progressRepository.findByUserKeyAndLessonIdIn(userKey, allLessonIds).stream()
+                        .collect(Collectors.toMap(LessonProgressEntity::getLessonId, Function.identity()));
+
+        List<ChapterSummaryResponse> chapters = chapterEntities.stream()
+                .map(chapter -> {
+                    List<LearningLessonEntity> chLessons =
+                            lessonsByChapter.getOrDefault(chapter.getChapterId(), List.of());
+                    return new ChapterSummaryResponse(
+                            chapter.getChapterId(),
+                            chapter.getTitle(),
+                            chapter.getDescription(),
+                            lessonCountByChapter.getOrDefault(chapter.getChapterId(), 0L).intValue(),
+                            chapter.getOrderIndex(),
+                            chapter.isPremium(),
+                            chapter.isPremium() && !premiumUser,
+                            computeCompletionPercent(chLessons, progressByLesson)
+                    );
+                })
                 .toList();
         return new ChapterListResponse(unitId, chapters);
     }
 
     public LessonListResponse listLessons(String chapterId) {
-        findChapter(chapterId);
-        List<LessonSummaryResponse> lessons = LESSONS.stream()
-                .filter(lesson -> lesson.chapterId().equals(chapterId))
-                .map(lesson -> new LessonSummaryResponse(
-                        lesson.lessonId(),
-                        lesson.title(),
-                        lesson.orderIndex(),
-                        lesson.durationSeconds(),
-                        lesson.requiresPremium(),
-                        lesson.locked(),
-                        lesson.status(),
-                        lesson.progressPct()
-                ))
-                .toList();
-        return new LessonListResponse(chapterId, lessons);
+        LearningChapterEntity chapter = chapterRepository.findById(chapterId)
+                .filter(LearningChapterEntity::isPublished)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAPTER_NOT_FOUND));
+
+        String userKey = currentUserKey();
+        boolean premiumUser = isPremiumUser();
+        List<LearningLessonEntity> lessons = lessonRepository.findByChapterIdAndPublishedTrueOrderByOrderIndexAsc(chapterId);
+        Map<String, LessonProgressEntity> progressByLesson = progressByLesson(userKey, lessons);
+
+        List<LessonSummaryResponse> responses = new java.util.ArrayList<>();
+        for (LearningLessonEntity lesson : lessons) {
+            boolean requiresPremium = chapter.isPremium() || lesson.isPremium();
+            LessonProgressEntity progress = progressByLesson.get(lesson.getLessonId());
+            String status = progress == null ? "NOT_STARTED" : progress.getStatus();
+            boolean locked = requiresPremium && !premiumUser;
+            responses.add(new LessonSummaryResponse(
+                    lesson.getLessonId(),
+                    lesson.getTitle(),
+                    lesson.getDescription(),
+                    lesson.getVideoUrl(),
+                    lesson.getDurationSeconds(),
+                    lesson.getOrderIndex(),
+                    requiresPremium,
+                    locked,
+                    status
+            ));
+        }
+        return new LessonListResponse(chapterId, responses);
     }
 
     public LessonDetailResponse getLesson(String lessonId) {
-        LessonRecord lesson = findLesson(lessonId);
-        if (lesson.requiresPremium()) {
-            throw new BusinessException(
-                    ErrorCode.PREMIUM_REQUIRED,
-                    "Premium access is required for lesson: " + lessonId
-            );
+        LearningLessonEntity lesson = lessonRepository.findByLessonIdAndPublishedTrue(lessonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LESSON_NOT_FOUND));
+        LearningChapterEntity chapter = chapterRepository.findById(lesson.getChapterId())
+                .filter(LearningChapterEntity::isPublished)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAPTER_NOT_FOUND));
+        if ((chapter.isPremium() || lesson.isPremium()) && !isPremiumUser()) {
+            throw new BusinessException(ErrorCode.PREMIUM_REQUIRED);
         }
-        return new LessonDetailResponse(
-                lesson.lessonId(),
-                lesson.chapterId(),
-                lesson.title(),
-                lesson.videoUrl(),
-                lesson.requiresPremium(),
-                lesson.locked(),
-                defaultCheckpointFor(lesson)
-        );
+
+        LessonProgressCheckpointResponse progress = progressRepository.findByUserKeyAndLessonId(currentUserKey(), lessonId)
+                .map(this::toCheckpoint)
+                .orElseGet(() -> new LessonProgressCheckpointResponse(0, 0, "VIDEO", null, "NOT_STARTED"));
+        return new LessonDetailResponse(lessonId, lesson.getTitle(), lesson.getVideoUrl(), chapter.isPremium() || lesson.isPremium(), progress);
     }
 
+    @Transactional
     public ProgressResponse updateProgress(String lessonId, UpdateProgressRequest request) {
-        LessonRecord lesson = findLesson(lessonId);
-        if (lesson.requiresPremium()) {
-            throw new BusinessException(
-                    ErrorCode.PREMIUM_REQUIRED,
-                    "Premium access is required for lesson: " + lessonId
-            );
+        LearningLessonEntity lesson = lessonRepository.findByLessonIdAndPublishedTrue(lessonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LESSON_NOT_FOUND));
+        LearningChapterEntity chapter = chapterRepository.findById(lesson.getChapterId())
+                .filter(LearningChapterEntity::isPublished)
+                .orElseThrow(() -> new BusinessException(ErrorCode.CHAPTER_NOT_FOUND));
+        if ((chapter.isPremium() || lesson.isPremium()) && !isPremiumUser()) {
+            throw new BusinessException(ErrorCode.PREMIUM_REQUIRED);
         }
-        validateProgress(request);
-        ProgressStatus defaultStatus = defaultProgressStatus(request.completionPct());
-        ProgressStatus status = ProgressStatus.parse(request.status(), defaultStatus);
-        return new ProgressResponse(
-                lessonId,
-                request.completionPct(),
-                request.lastPositionSeconds(),
-                blankToDefault(request.phase(), "VIDEO"),
-                request.currentQuestionIndex() == null ? 0 : request.currentQuestionIndex(),
-                status.name()
-        );
+
+        String userKey = currentUserKey();
+        LessonProgressEntity progress = progressRepository.findByUserKeyAndLessonId(userKey, lessonId)
+                .orElseGet(() -> new LessonProgressEntity(userKey, lessonId));
+        String phase = request.phase() == null || request.phase().isBlank() ? "VIDEO" : request.phase();
+        String status = request.status() == null ? "IN_PROGRESS" : request.status().name();
+        progress.update(request.completionPct(), request.lastPositionSeconds(), phase, request.currentQuestionIndex(), status);
+        LessonProgressEntity saved = progressRepository.save(progress);
+        return toProgressResponse(saved);
     }
 
-    private PracticeItemSummaryResponse toSummary(PracticeItemDetailResponse item) {
+    private PracticeItemSummaryResponse toPracticeSummary(PracticeItemEntity item) {
         return new PracticeItemSummaryResponse(
-                item.itemId(),
-                item.lessonId(),
-                item.title(),
-                item.category(),
-                item.level(),
-                "beginner".equals(item.level()) ? 120 : 180
+                item.getPracticeItemId(),
+                item.getLessonId(),
+                item.getLabel(),
+                item.getCategory(),
+                item.getLevel(),
+                item.getExpectedGloss(),
+                item.getSourceVideoFile(),
+                item.getVideoUrl()
         );
     }
 
-    private boolean matches(String actual, String expected) {
-        return expected == null || expected.isBlank()
-                || actual.equalsIgnoreCase(expected.trim());
+    private LessonProgressCheckpointResponse toCheckpoint(LessonProgressEntity progress) {
+        return new LessonProgressCheckpointResponse(
+                progress.getCompletionPct(),
+                progress.getLastPositionSeconds(),
+                progress.getPhase(),
+                progress.getCurrentQuestionIndex(),
+                progress.getStatus()
+        );
     }
 
-    private UnitRecord findUnit(String unitId) {
-        return UNITS.stream()
-                .filter(unit -> unit.summary().unitId().equals(unitId))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNIT_NOT_FOUND, "Unit not found: " + unitId));
+    private ProgressResponse toProgressResponse(LessonProgressEntity progress) {
+        return new ProgressResponse(
+                progress.getLessonId(),
+                progress.getCompletionPct(),
+                progress.getLastPositionSeconds(),
+                progress.getPhase(),
+                progress.getCurrentQuestionIndex(),
+                progress.getStatus()
+        );
     }
 
-    private ChapterRecord findChapter(String chapterId) {
-        return CHAPTERS.stream()
-                .filter(chapter -> chapter.chapterId().equals(chapterId))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.CHAPTER_NOT_FOUND, "Chapter not found: " + chapterId));
-    }
-
-    private LessonRecord findLesson(String lessonId) {
-        return LESSONS.stream()
-                .filter(lesson -> lesson.lessonId().equals(lessonId))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.LESSON_NOT_FOUND, "Lesson not found: " + lessonId));
-    }
-
-    private int countLessons(String chapterId) {
-        return (int) LESSONS.stream()
-                .filter(lesson -> lesson.chapterId().equals(chapterId))
-                .count();
-    }
-
-    private LessonProgressCheckpointResponse defaultCheckpointFor(LessonRecord lesson) {
-        if ("lesson-greetings-1".equals(lesson.lessonId())) {
-            return new LessonProgressCheckpointResponse(35, 42, "PRACTICE", 1, "IN_PROGRESS");
-        }
-        return new LessonProgressCheckpointResponse(lesson.progressPct(), 0, "VIDEO", 0, lesson.status());
-    }
-
-    private void validateProgress(UpdateProgressRequest request) {
-        if (request == null || request.completionPct() == null || request.lastPositionSeconds() == null) {
-            throw new BusinessException(
-                    ErrorCode.VALIDATION_ERROR,
-                    "completionPct and lastPositionSeconds are required"
-            );
-        }
-        if (request.completionPct() < 0 || request.completionPct() > 100) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "completionPct must be between 0 and 100");
-        }
-        if (request.lastPositionSeconds() < 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "lastPositionSeconds must be non-negative");
-        }
-        if (request.currentQuestionIndex() != null && request.currentQuestionIndex() < 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "currentQuestionIndex must be non-negative");
-        }
-    }
-
-    private ProgressStatus defaultProgressStatus(int completionPct) {
-        return completionPct == 100 ? ProgressStatus.COMPLETED : ProgressStatus.IN_PROGRESS;
-    }
-
-    private void validateUnitSearch(int page, int size) {
-        if (page < 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "page must be non-negative");
-        }
-        if (size < 1 || size > 100) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "size must be between 1 and 100");
-        }
-    }
-
-    private int pageCount(int totalElements, int size) {
-        return (int) Math.ceil((double) totalElements / size);
-    }
-
-    private void validateAttempt(SubmitSignatureAttemptRequest request) {
-        if (request == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Request body is required");
-        }
-        if (isBlank(request.practiceItemId())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "practiceItemId is required");
-        }
-        if (isBlank(request.documentUploadId())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "documentUploadId is required");
-        }
-        if (isBlank(request.signatureVector())) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "signatureVector is required");
-        }
-        if (request.durationMs() == null || request.durationMs() <= 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "durationMs must be greater than zero");
-        }
-    }
-
-    private int scoreFor(String signatureVector) {
-        String normalized = signatureVector.toLowerCase(Locale.ROOT);
-        if (normalized.contains("right-hand") || normalized.contains("flat")) {
-            return 86;
-        }
-        return 72;
-    }
-
-    private String blankToDefault(String value, String defaultValue) {
-        return isBlank(value) ? defaultValue : value.trim();
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
-    private record ChapterRecord(
-            String chapterId,
-            String unitId,
-            String title,
-            int orderIndex,
-            boolean requiresPremium,
-            boolean locked,
-            int progressPct
+    private int computeCompletionPercent(
+            List<LearningLessonEntity> lessons,
+            Map<String, LessonProgressEntity> progressByLesson
     ) {
+        if (lessons.isEmpty()) return 0;
+        int total = lessons.stream()
+                .mapToInt(l -> {
+                    LessonProgressEntity p = progressByLesson.get(l.getLessonId());
+                    return p == null ? 0 : p.getCompletionPct();
+                })
+                .sum();
+        return Math.round((float) total / lessons.size());
     }
 
-    private record UnitRecord(UnitSummaryResponse summary, boolean published) {
+    private Map<String, LessonProgressEntity> progressByLesson(String userKey, List<LearningLessonEntity> lessons) {
+        List<String> lessonIds = lessons.stream()
+                .map(LearningLessonEntity::getLessonId)
+                .toList();
+        if (lessonIds.isEmpty()) {
+            return Map.of();
+        }
+        return progressRepository.findByUserKeyAndLessonIdIn(userKey, lessonIds).stream()
+                .collect(Collectors.toMap(LessonProgressEntity::getLessonId, Function.identity()));
     }
 
-    private record LessonRecord(
-            String lessonId,
-            String chapterId,
-            String title,
-            int orderIndex,
-            int durationSeconds,
-            boolean requiresPremium,
-            boolean locked,
-            String status,
-            int progressPct,
-            String videoUrl
-    ) {
+    private String currentUserKey() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof JwtService.Principal principal)) {
+            return ANONYMOUS_USER_KEY;
+        }
+        return principal.email();
+    }
+
+    private boolean isPremiumUser() {
+        String userKey = currentUserKey();
+        if (ANONYMOUS_USER_KEY.equals(userKey)) {
+            return false;
+        }
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof JwtService.Principal principal
+                && ("ADMIN".equals(principal.role()) || "SUPER_ADMIN".equals(principal.role()))) {
+            return true;
+        }
+        boolean premiumSubscription = userSubscriptionRepository.findById(userKey)
+                .filter(subscription -> "ACTIVE".equals(subscription.getStatus()))
+                .filter(subscription -> subscription.getPlanType() != null && !subscription.getPlanType().isBlank())
+                .isPresent();
+        if (premiumSubscription) {
+            return true;
+        }
+        return userRepository.findByEmailIgnoreCase(userKey)
+                .map(user -> "PREMIUM".equals(user.getAccountType()))
+                .orElse(false);
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeGloss(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String firstNonBlank(String preferred, String fallback) {
+        return preferred == null || preferred.isBlank() ? fallback : preferred;
+    }
+
+    private int scoreFromConfidence(Double confidence, boolean correct) {
+        if (confidence == null) {
+            return correct ? 100 : 0;
+        }
+        int score = Math.round((float) (confidence * 100));
+        return Math.max(0, Math.min(100, score));
+    }
+
+    private List<String> feedbackCodes(String aiStatus, Boolean correct, Double confidence) {
+        String normalizedStatus = normalize(aiStatus);
+        if ("no_hands".equals(normalizedStatus)) {
+            return List.of("NO_HANDS_DETECTED");
+        }
+        if ("error".equals(normalizedStatus)) {
+            return List.of("AI_INFERENCE_ERROR");
+        }
+        if (confidence != null && confidence < 0.70) {
+            return List.of("LOW_CONFIDENCE", "IMPROVE_LIGHTING_AND_FRAMING");
+        }
+        if (Boolean.TRUE.equals(correct)) {
+            return List.of("SIGN_MATCH", "CONFIDENCE_ACCEPTABLE");
+        }
+        if (Boolean.FALSE.equals(correct)) {
+            return List.of("SIGN_MISMATCH", "TRY_AGAIN_SLOWLY");
+        }
+        return List.of("HAND_SHAPE_MATCH", "MOVEMENT_PATH_ACCEPTABLE");
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 digest is not available", exception);
+        }
     }
 }

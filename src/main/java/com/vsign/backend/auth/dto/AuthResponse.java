@@ -5,19 +5,13 @@ public record AuthResponse(
         String tokenType,
         AuthUserResponse user
 ) {
-    public static AuthResponse bearerToken(
-            String accessToken,
-            String email,
-            String fullName,
-            String role,
-            String accountType
-    ) {
-        return new AuthResponse(accessToken, "Bearer", new AuthUserResponse(email, fullName, role, accountType));
-    }
-
     public record AuthUserResponse(
+            String id,
             String email,
             String fullName,
+            String displayName,
+            String avatarUrl,
+            String bio,
             String role,
             String accountType
     ) {

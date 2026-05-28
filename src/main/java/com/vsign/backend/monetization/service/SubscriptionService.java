@@ -2,96 +2,151 @@ package com.vsign.backend.monetization.service;
 
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
-import com.vsign.backend.monetization.dto.ActivePlanResponse;
 import com.vsign.backend.monetization.dto.CheckoutIntentRequest;
 import com.vsign.backend.monetization.dto.CheckoutIntentResponse;
 import com.vsign.backend.monetization.dto.PlanListResponse;
 import com.vsign.backend.monetization.dto.SubscriptionPlanResponse;
-import java.math.BigDecimal;
+import com.vsign.backend.monetization.dto.SubscriptionSummaryResponse;
+import com.vsign.backend.monetization.persistence.CheckoutIntentEntity;
+import com.vsign.backend.monetization.persistence.CheckoutIntentRepository;
+import com.vsign.backend.monetization.persistence.SubscriptionPlanEntity;
+import com.vsign.backend.monetization.persistence.SubscriptionPlanRepository;
+import com.vsign.backend.monetization.persistence.UserSubscriptionEntity;
+import com.vsign.backend.monetization.persistence.UserSubscriptionRepository;
+import java.time.temporal.ChronoUnit;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class SubscriptionService {
+    private static final String FREE_PLAN_ID = "free";
 
-    private static final List<SubscriptionPlanResponse> PLANS = List.of(
-            new SubscriptionPlanResponse(
-                    "free",
-                    "Free Learner",
-                    BigDecimal.ZERO,
-                    "VND",
-                    3,
-                    List.of("Dictionary access", "Basic signature practice", "Community learning path")
-            ),
-            new SubscriptionPlanResponse(
-                    "pro-monthly",
-                    "Pro Monthly",
-                    BigDecimal.valueOf(99000),
-                    "VND",
-                    50,
-                    List.of("Unlimited dictionary access", "Document upload workflow", "Advanced signature feedback")
-            ),
-            new SubscriptionPlanResponse(
-                    "school-monthly",
-                    "School Monthly",
-                    BigDecimal.valueOf(499000),
-                    "VND",
-                    500,
-                    List.of("Teacher dashboard", "Class progress reports", "Bulk learner management")
-            )
-    );
+    private final SubscriptionPlanRepository planRepository;
+    private final CheckoutIntentRepository checkoutIntentRepository;
+    private final UserSubscriptionRepository userSubscriptionRepository;
 
-    public List<SubscriptionPlanResponse> listPlans() {
-        return PLANS;
+    public SubscriptionService(
+            SubscriptionPlanRepository planRepository,
+            CheckoutIntentRepository checkoutIntentRepository,
+            UserSubscriptionRepository userSubscriptionRepository
+    ) {
+        this.planRepository = planRepository;
+        this.checkoutIntentRepository = checkoutIntentRepository;
+        this.userSubscriptionRepository = userSubscriptionRepository;
     }
 
-    public PlanListResponse listActivePlans() {
-        return new PlanListResponse(List.of(
-                toActivePlan(PLANS.get(1), true),
-                toActivePlan(PLANS.get(2), true),
-                toActivePlan(PLANS.get(0), true)
+    public List<SubscriptionPlanResponse> legacyPlans() {
+        return planRepository.findByLegacyVisibleTrueOrderByDisplayOrderAsc().stream()
+                .map(this::toPlanResponse)
+                .toList();
+    }
+
+    public PlanListResponse activePlans() {
+        return new PlanListResponse(activePlanList());
+    }
+
+    public List<SubscriptionPlanResponse> activePlanList() {
+        return planRepository.findByActiveTrueAndPlanIdNotOrderByDisplayOrderAsc(FREE_PLAN_ID).stream()
+                .map(this::toPlanResponse)
+                .toList();
+    }
+
+    public SubscriptionPlanEntity requirePlanEntity(String planId) {
+        return planRepository.findById(planId)
+                .filter(SubscriptionPlanEntity::isActive)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    public SubscriptionPlanResponse requirePlan(String planId) {
+        return toPlanResponse(requirePlanEntity(planId));
+    }
+
+    public SubscriptionPlanEntity requirePlanEntityByType(String planType) {
+        if (planType == null || planType.isBlank()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND);
+        }
+        return planRepository.findByPlanTypeAndActiveTrue(planType)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    public SubscriptionPlanResponse requirePlanByType(String planType) {
+        return toPlanResponse(requirePlanEntityByType(planType));
+    }
+
+    @Transactional
+    public CheckoutIntentResponse createCheckout(CheckoutIntentRequest request) {
+        SubscriptionPlanEntity plan = requirePlanEntity(request.planId());
+        String checkoutId = "checkout-" + UUID.randomUUID();
+        String checkoutUrl = "https://pay.vsign.test/checkout/" + plan.getPlanId();
+        CheckoutIntentEntity checkout = checkoutIntentRepository.save(new CheckoutIntentEntity(
+                checkoutId,
+                request.planId(),
+                request.userId(),
+                "CREATED",
+                checkoutUrl,
+                request.successUrl(),
+                request.cancelUrl()
         ));
-    }
-
-    public CheckoutIntentResponse createCheckoutIntent(CheckoutIntentRequest request) {
-        if (request == null || isBlank(request.planId()) || isBlank(request.userId())) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "planId and userId are required");
-        }
-
-        SubscriptionPlanResponse plan = PLANS.stream()
-                .filter(candidate -> candidate.planId().equals(request.planId()))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST, "Unsupported subscription plan"));
-
-        if (plan.monthlyPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Checkout is only available for paid plans");
-        }
-
-        String checkoutIntentId = "chk_" + request.userId() + "_" + request.planId();
         return new CheckoutIntentResponse(
-                checkoutIntentId,
-                plan.planId(),
-                "MOCK_PAYMENT",
-                "PENDING",
-                plan.monthlyPrice(),
-                plan.currency(),
-                "https://payments.v-sign.test/checkout/" + checkoutIntentId
+                checkout.getCheckoutId(),
+                checkout.getPlanId(),
+                checkout.getStatus(),
+                checkout.getCheckoutUrl()
         );
     }
 
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
+    @Transactional
+    public SubscriptionSummaryResponse currentSubscription(String email) {
+        UserSubscriptionEntity subscription = userSubscriptionRepository.findById(email)
+                .orElseGet(() -> createDefaultSubscription(email));
+        return toSubscriptionSummary(subscription);
     }
 
-    private static ActivePlanResponse toActivePlan(SubscriptionPlanResponse plan, boolean active) {
-        return new ActivePlanResponse(
-                plan.planId(),
-                plan.displayName(),
-                plan.monthlyPrice(),
-                plan.currency(),
-                plan.maxUploadsPerMonth(),
-                plan.features(),
-                active
+    private UserSubscriptionEntity createDefaultSubscription(String email) {
+        if (email != null && email.toLowerCase(Locale.ROOT).contains("premium")) {
+            OffsetDateTime startedAt = OffsetDateTime.now().minusDays(3);
+            OffsetDateTime expiresAt = startedAt.plusDays(30);
+            return userSubscriptionRepository.save(new UserSubscriptionEntity(
+                    email,
+                    "MONTHLY",
+                    "ACTIVE",
+                    startedAt,
+                    expiresAt
+            ));
+        }
+        return userSubscriptionRepository.save(new UserSubscriptionEntity(email, null, "FREE", null, null));
+    }
+
+    private SubscriptionSummaryResponse toSubscriptionSummary(UserSubscriptionEntity subscription) {
+        int remainingDays = 0;
+        if (subscription.getExpiresAt() != null) {
+            long days = ChronoUnit.DAYS.between(OffsetDateTime.now().toLocalDate(), subscription.getExpiresAt().toLocalDate());
+            remainingDays = (int) Math.max(0, days);
+        }
+        return new SubscriptionSummaryResponse(
+                subscription.getPlanType(),
+                subscription.getStatus(),
+                subscription.getStartedAt() == null ? null : subscription.getStartedAt().toString(),
+                subscription.getExpiresAt() == null ? null : subscription.getExpiresAt().toString(),
+                remainingDays
+        );
+    }
+
+    private SubscriptionPlanResponse toPlanResponse(SubscriptionPlanEntity plan) {
+        return new SubscriptionPlanResponse(
+                plan.getPlanId(),
+                plan.getPlanType(),
+                plan.getName(),
+                plan.getAmount(),
+                plan.getPrice(),
+                plan.getCurrency(),
+                plan.getDurationDays(),
+                plan.isActive()
         );
     }
 }

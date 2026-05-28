@@ -8,279 +8,183 @@ import com.vsign.backend.assessment.dto.QuizResultResponse;
 import com.vsign.backend.assessment.dto.QuizReviewQuestionResponse;
 import com.vsign.backend.assessment.dto.QuizReviewResponse;
 import com.vsign.backend.assessment.dto.SubmitAttemptRequest;
+import com.vsign.backend.assessment.persistence.QuizAttemptAnswerEntity;
+import com.vsign.backend.assessment.persistence.QuizAttemptAnswerRepository;
+import com.vsign.backend.assessment.persistence.QuizAttemptEntity;
+import com.vsign.backend.assessment.persistence.QuizAttemptRepository;
+import com.vsign.backend.assessment.persistence.QuizEntity;
+import com.vsign.backend.assessment.persistence.QuizOptionEntity;
+import com.vsign.backend.assessment.persistence.QuizOptionRepository;
+import com.vsign.backend.assessment.persistence.QuizQuestionEntity;
+import com.vsign.backend.assessment.persistence.QuizQuestionRepository;
+import com.vsign.backend.assessment.persistence.QuizRepository;
 import com.vsign.backend.common.exception.BusinessException;
 import com.vsign.backend.common.exception.ErrorCode;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional(readOnly = true)
 public class QuizAttemptService {
+    private final QuizRepository quizRepository;
+    private final QuizQuestionRepository questionRepository;
+    private final QuizOptionRepository optionRepository;
+    private final QuizAttemptRepository attemptRepository;
+    private final QuizAttemptAnswerRepository attemptAnswerRepository;
 
-    private static final String PREMIUM_LESSON_ID = "lesson-premium-conversation";
-
-    private static final QuizDefinition GREETINGS_QUIZ = new QuizDefinition(
-            "quiz-greetings",
-            "lesson-greetings",
-            "Greeting Recognition Check",
-            70,
-            180,
-            List.of(
-                    new QuizQuestion(
-                            "quiz-q-hello",
-                            "Choose the sign that means Hello.",
-                            "answer-hello",
-                            "Hello is commonly presented with a greeting motion.",
-                            List.of(option("answer-hello", "Hello"), option("answer-water", "Water"))
-                    ),
-                    new QuizQuestion(
-                            "quiz-q-thanks",
-                            "Choose the sign that means Thank you.",
-                            "answer-thanks",
-                            "Thank you moves outward from the chin.",
-                            List.of(option("answer-thanks", "Thank you"), option("answer-thanks-wrong", "School"))
-                    )
-            )
-    );
-
-    private final Map<String, AttemptState> attempts = new ConcurrentHashMap<>();
-
-    public QuizAttemptService() {
-        attempts.put("attempt-greetings-ready", AttemptState.ready("attempt-greetings-ready", GREETINGS_QUIZ));
-        attempts.put("attempt-greetings-partial", AttemptState.ready("attempt-greetings-partial", GREETINGS_QUIZ));
-        attempts.put("attempt-greetings-mixed", AttemptState.ready("attempt-greetings-mixed", GREETINGS_QUIZ));
-        attempts.put(
-                "attempt-greetings-reviewed",
-                AttemptState.submitted(
-                        "attempt-greetings-reviewed",
-                        GREETINGS_QUIZ,
-                        Map.of("quiz-q-hello", "answer-hello", "quiz-q-thanks", "answer-thanks-wrong")
-                )
-        );
+    public QuizAttemptService(
+            QuizRepository quizRepository,
+            QuizQuestionRepository questionRepository,
+            QuizOptionRepository optionRepository,
+            QuizAttemptRepository attemptRepository,
+            QuizAttemptAnswerRepository attemptAnswerRepository
+    ) {
+        this.quizRepository = quizRepository;
+        this.questionRepository = questionRepository;
+        this.optionRepository = optionRepository;
+        this.attemptRepository = attemptRepository;
+        this.attemptAnswerRepository = attemptAnswerRepository;
     }
 
+    @Transactional
     public QuizResponse getLessonQuiz(String lessonId) {
-        if (PREMIUM_LESSON_ID.equals(lessonId)) {
-            throw new BusinessException(ErrorCode.PREMIUM_REQUIRED, "Premium access is required for this lesson quiz");
+        QuizEntity quiz = quizRepository.findByLessonIdAndPublishedTrue(lessonId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.LESSON_NOT_FOUND));
+        if (quiz.isRequiresPremium()) {
+            throw new BusinessException(ErrorCode.PREMIUM_REQUIRED);
         }
-        if (!GREETINGS_QUIZ.lessonId().equals(lessonId)) {
-            throw new BusinessException(ErrorCode.LESSON_NOT_FOUND, "Lesson quiz not found");
-        }
+
         String attemptId = "attempt-" + UUID.randomUUID();
-        attempts.put(attemptId, AttemptState.ready(attemptId, GREETINGS_QUIZ));
-        return GREETINGS_QUIZ.toResponse(attemptId);
+        attemptRepository.save(new QuizAttemptEntity(attemptId, quiz.getQuizId(), lessonId));
+        List<QuizQuestionEntity> questions = questionRepository.findByQuizIdOrderByOrderIndexAsc(quiz.getQuizId());
+        Map<String, List<QuizOptionEntity>> optionsByQuestion = optionsByQuestion(questions);
+        return new QuizResponse(
+                lessonId,
+                quiz.getQuizId(),
+                attemptId,
+                questions.stream()
+                        .map(question -> toPublicQuestion(question, optionsByQuestion.getOrDefault(question.getQuestionId(), List.of())))
+                        .toList()
+        );
     }
 
-    public QuizResultResponse submitAttempt(String attemptId, SubmitAttemptRequest request) {
-        AttemptState attempt = findAttempt(attemptId);
-        if (attempt.submitted()) {
-            throw new BusinessException(ErrorCode.ATTEMPT_ALREADY_SUBMITTED, "Quiz attempt already submitted");
+    @Transactional
+    public QuizResultResponse submit(String attemptId, SubmitAttemptRequest request) {
+        QuizAttemptEntity attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ATTEMPT_NOT_FOUND));
+        if (attempt.isSubmitted()) {
+            throw new BusinessException(ErrorCode.ATTEMPT_ALREADY_SUBMITTED);
         }
 
-        validateSubmitRequest(request);
-        Map<String, QuizAnswerRequest> answersByQuestionId = request.answers().stream()
-                .collect(Collectors.toMap(QuizAnswerRequest::questionId, Function.identity(), (first, ignored) -> first));
-        ensureAnswersBelongToQuiz(attempt.quiz(), answersByQuestionId);
-        ensureSelectedAnswersBelongToQuestions(attempt.quiz(), answersByQuestionId);
-
-        Map<String, String> selectedAnswers = attempt.quiz().questions().stream()
-                .filter(question -> answersByQuestionId.containsKey(question.id()))
+        QuizEntity quiz = quizRepository.findById(attempt.getQuizId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        List<QuizQuestionEntity> questions = questionRepository.findByQuizIdOrderByOrderIndexAsc(quiz.getQuizId());
+        Map<String, QuizQuestionEntity> questionsById = questions.stream()
+                .collect(Collectors.toMap(QuizQuestionEntity::getQuestionId, question -> question));
+        Map<String, Set<String>> answerIdsByQuestion = optionsByQuestion(questions).entrySet().stream()
                 .collect(Collectors.toMap(
-                        QuizQuestion::id,
-                        question -> answersByQuestionId.get(question.id()).selectedAnswerId(),
-                        (first, ignored) -> first,
-                        LinkedHashMap::new
+                        Map.Entry::getKey,
+                        entry -> entry.getValue().stream().map(QuizOptionEntity::getAnswerId).collect(Collectors.toSet())
                 ));
-        if (!attempt.markSubmitted(selectedAnswers)) {
-            throw new BusinessException(ErrorCode.ATTEMPT_ALREADY_SUBMITTED, "Quiz attempt already submitted");
-        }
 
-        int correctCount = correctAnswerCount(attempt);
-        int unansweredCount = attempt.quiz().questions().size() - selectedAnswers.size();
-        int score = Math.round(correctCount * 100.0f / attempt.quiz().questions().size());
-        boolean timedOut = request.durationSeconds() != null
-                && request.durationSeconds() > attempt.quiz().timeLimitSeconds();
-        return new QuizResultResponse(
-                attempt.id(),
-                attempt.quiz().id(),
-                score,
-                score >= attempt.quiz().passingScore(),
-                correctCount * 10,
-                true,
-                timedOut,
-                unansweredCount
-        );
-    }
+        List<QuizAnswerRequest> answers = request.answers() == null ? List.of() : request.answers();
+        validateAnswers(answers, questionsById, answerIdsByQuestion);
+        Map<String, String> answerMap = answers.stream()
+                .collect(Collectors.toMap(QuizAnswerRequest::questionId, QuizAnswerRequest::selectedAnswerId, (left, right) -> right));
 
-    public QuizReviewResponse reviewAttempt(String attemptId) {
-        AttemptState attempt = findAttempt(attemptId);
-        if (!attempt.submitted()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz attempt must be submitted before review");
-        }
-        List<QuizReviewQuestionResponse> questions = attempt.quiz().questions().stream()
-                .map(question -> toReviewQuestion(question, attempt.selectedAnswers().get(question.id())))
-                .toList();
-        return new QuizReviewResponse(attempt.id(), attempt.quiz().id(), questions);
-    }
-
-    private static OptionResponse option(String id, String label) {
-        return new OptionResponse(id, label);
-    }
-
-    private static QuizReviewQuestionResponse toReviewQuestion(QuizQuestion question, String selectedAnswerId) {
-        return new QuizReviewQuestionResponse(
-                question.id(),
-                question.prompt(),
-                selectedAnswerId,
-                question.correctAnswerId(),
-                question.correctAnswerId().equals(selectedAnswerId),
-                question.explanation()
-        );
-    }
-
-    private static int correctAnswerCount(AttemptState attempt) {
-        return (int) attempt.quiz().questions().stream()
-                .filter(question -> question.correctAnswerId().equals(attempt.selectedAnswers().get(question.id())))
-                .count();
-    }
-
-    private static void validateSubmitRequest(SubmitAttemptRequest request) {
-        if (request == null || request.answers() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz answers are required");
-        }
-        boolean hasInvalidAnswer = request.answers().stream()
-                .anyMatch(answer -> answer == null
-                        || answer.questionId() == null
-                        || answer.questionId().isBlank()
-                        || answer.selectedAnswerId() == null
-                        || answer.selectedAnswerId().isBlank());
-        if (hasInvalidAnswer) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz answers require question and answer ids");
-        }
-        if (request.durationSeconds() != null && request.durationSeconds() < 0) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz duration cannot be negative");
-        }
-    }
-
-    private static void ensureAnswersBelongToQuiz(QuizDefinition quiz, Map<String, QuizAnswerRequest> answersByQuestionId) {
-        boolean hasUnknownQuestion = answersByQuestionId.keySet().stream()
-                .anyMatch(questionId -> quiz.questions().stream().noneMatch(question -> question.id().equals(questionId)));
-        if (hasUnknownQuestion) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz answer contains unknown question id");
-        }
-    }
-
-    private static void ensureSelectedAnswersBelongToQuestions(
-            QuizDefinition quiz,
-            Map<String, QuizAnswerRequest> answersByQuestionId
-    ) {
-        boolean hasUnknownAnswer = quiz.questions().stream()
-                .filter(question -> answersByQuestionId.containsKey(question.id()))
-                .anyMatch(question -> question.options().stream()
-                        .noneMatch(option -> option.id().equals(
-                                answersByQuestionId.get(question.id()).selectedAnswerId()
-                        )));
-        if (hasUnknownAnswer) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Quiz answer does not belong to question");
-        }
-    }
-
-    private AttemptState findAttempt(String attemptId) {
-        AttemptState attempt = attempts.get(attemptId);
-        if (attempt == null) {
-            throw new BusinessException(ErrorCode.ATTEMPT_NOT_FOUND, "Quiz attempt not found");
-        }
-        return attempt;
-    }
-
-    private record QuizDefinition(
-            String id,
-            String lessonId,
-            String title,
-            int passingScore,
-            int timeLimitSeconds,
-            List<QuizQuestion> questions
-    ) {
-        QuizResponse toResponse(String attemptId) {
-            return new QuizResponse(
-                    id,
-                    lessonId,
-                    attemptId,
-                    title,
-                    passingScore,
-                    timeLimitSeconds,
-                    questions.stream().map(QuizQuestion::toResponse).toList()
-            );
-        }
-    }
-
-    private record QuizQuestion(
-            String id,
-            String prompt,
-            String correctAnswerId,
-            String explanation,
-            List<OptionResponse> options
-    ) {
-        QuestionResponse toResponse() {
-            return new QuestionResponse(
-                    id,
-                    prompt,
-                    "multiple-choice",
-                    "/media/quizzes/" + id + ".mp4",
-                    options
-            );
-        }
-    }
-
-    private static final class AttemptState {
-        private final String id;
-        private final QuizDefinition quiz;
-        private boolean submitted;
-        private Map<String, String> selectedAnswers;
-
-        private AttemptState(String id, QuizDefinition quiz, boolean submitted, Map<String, String> selectedAnswers) {
-            this.id = id;
-            this.quiz = quiz;
-            this.submitted = submitted;
-            this.selectedAnswers = new LinkedHashMap<>(selectedAnswers);
-        }
-
-        static AttemptState ready(String id, QuizDefinition quiz) {
-            return new AttemptState(id, quiz, false, Map.of());
-        }
-
-        static AttemptState submitted(String id, QuizDefinition quiz, Map<String, String> selectedAnswers) {
-            return new AttemptState(id, quiz, true, selectedAnswers);
-        }
-
-        String id() {
-            return id;
-        }
-
-        QuizDefinition quiz() {
-            return quiz;
-        }
-
-        synchronized boolean submitted() {
-            return submitted;
-        }
-
-        synchronized Map<String, String> selectedAnswers() {
-            return selectedAnswers;
-        }
-
-        synchronized boolean markSubmitted(Map<String, String> answers) {
-            if (submitted) {
-                return false;
+        int correct = 0;
+        for (QuizQuestionEntity question : questions) {
+            if (question.getCorrectAnswerId().equals(answerMap.get(question.getQuestionId()))) {
+                correct++;
             }
-            submitted = true;
-            selectedAnswers = new LinkedHashMap<>(answers);
-            return true;
         }
+        int unanswered = (int) questions.stream()
+                .filter(question -> !answerMap.containsKey(question.getQuestionId()))
+                .count();
+        int score = questions.isEmpty() ? 0 : correct * 100 / questions.size();
+        boolean passed = score >= quiz.getPassingScore();
+
+        attemptAnswerRepository.deleteByAttemptId(attemptId);
+        for (QuizQuestionEntity question : questions) {
+            String selectedAnswerId = answerMap.get(question.getQuestionId());
+            attemptAnswerRepository.save(new QuizAttemptAnswerEntity(
+                    attemptId,
+                    question.getQuestionId(),
+                    selectedAnswerId,
+                    question.getCorrectAnswerId().equals(selectedAnswerId)
+            ));
+        }
+        attempt.submit(score, passed, request.durationSeconds(), false);
+        attemptRepository.save(attempt);
+
+        return new QuizResultResponse(attemptId, score, passed, quiz.getXpAward(), true, false, unanswered);
+    }
+
+    public QuizReviewResponse review(String attemptId) {
+        QuizAttemptEntity attempt = attemptRepository.findById(attemptId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ATTEMPT_NOT_FOUND));
+        if (!attempt.isSubmitted()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "Attempt has not been submitted");
+        }
+
+        List<QuizQuestionEntity> questions = questionRepository.findByQuizIdOrderByOrderIndexAsc(attempt.getQuizId());
+        Map<String, QuizAttemptAnswerEntity> answersByQuestion = attemptAnswerRepository.findByAttemptIdOrderByIdAsc(attemptId).stream()
+                .collect(Collectors.toMap(QuizAttemptAnswerEntity::getQuestionId, answer -> answer, (left, right) -> right));
+        List<QuizReviewQuestionResponse> reviewQuestions = questions.stream()
+                .map(question -> {
+                    QuizAttemptAnswerEntity answer = answersByQuestion.get(question.getQuestionId());
+                    String selectedAnswerId = answer == null ? null : answer.getSelectedAnswerId();
+                    return new QuizReviewQuestionResponse(
+                            question.getQuestionId(),
+                            selectedAnswerId,
+                            question.getCorrectAnswerId(),
+                            question.getCorrectAnswerId().equals(selectedAnswerId),
+                            "Review the hand shape and movement for " + question.getPrompt()
+                    );
+                })
+                .toList();
+        return new QuizReviewResponse(attemptId, attempt.getScore(), attempt.isPassed(), reviewQuestions);
+    }
+
+    private void validateAnswers(
+            List<QuizAnswerRequest> answers,
+            Map<String, QuizQuestionEntity> questionsById,
+            Map<String, Set<String>> answerIdsByQuestion
+    ) {
+        for (QuizAnswerRequest answer : answers) {
+            if (!questionsById.containsKey(answer.questionId())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+            }
+            if (!answerIdsByQuestion.getOrDefault(answer.questionId(), Set.of()).contains(answer.selectedAnswerId())) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+            }
+        }
+    }
+
+    private Map<String, List<QuizOptionEntity>> optionsByQuestion(List<QuizQuestionEntity> questions) {
+        List<String> questionIds = questions.stream()
+                .map(QuizQuestionEntity::getQuestionId)
+                .toList();
+        if (questionIds.isEmpty()) {
+            return Map.of();
+        }
+        return optionRepository.findByQuestionIdInOrderByOrderIndexAsc(questionIds).stream()
+                .collect(Collectors.groupingBy(QuizOptionEntity::getQuestionId));
+    }
+
+    private QuestionResponse toPublicQuestion(QuizQuestionEntity question, List<QuizOptionEntity> options) {
+        return new QuestionResponse(
+                question.getQuestionId(),
+                question.getPrompt(),
+                options.stream()
+                        .map(option -> new OptionResponse(option.getAnswerId(), option.getText()))
+                        .toList(),
+                null
+        );
     }
 }

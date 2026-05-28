@@ -1,14 +1,9 @@
 package com.vsign.backend.monetization.dto;
 
-import java.math.BigDecimal;
-
 public record CheckoutIntentResponse(
-        String checkoutIntentId,
+        String checkoutId,
         String planId,
-        String provider,
         String status,
-        BigDecimal amount,
-        String currency,
         String checkoutUrl
 ) {
 }

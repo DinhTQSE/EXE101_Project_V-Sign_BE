@@ -1,10 +1,12 @@
 package com.vsign.backend.common.security;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Optional;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,77 +14,80 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class JwtService {
-
-    private static final String HMAC_ALGO = "HmacSHA256";
-    private final byte[] secretBytes;
-    private final long expirationSeconds;
+    private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private final ObjectMapper objectMapper;
+    private final byte[] secret;
+    private final long expirationMs;
 
     public JwtService(
-            @Value("${app.jwt.secret:vsign-task3-dev-secret}") String secret,
-            @Value("${app.jwt.expiration-seconds:86400}") long expirationSeconds
+            ObjectMapper objectMapper,
+            @Value("${jwt.secret:test-secret-key-that-is-long-enough-for-local-tests}") String secret,
+            @Value("${jwt.expiration:150000000}") long expirationMs
     ) {
-        this.secretBytes = secret.getBytes(StandardCharsets.UTF_8);
-        this.expirationSeconds = expirationSeconds;
-    }
-
-    public String generateToken(String email) {
-        return generateToken(email, "USER");
+        this.objectMapper = objectMapper;
+        this.secret = secret.getBytes(StandardCharsets.UTF_8);
+        this.expirationMs = expirationMs;
     }
 
     public String generateToken(String email, String role) {
-        long expiresAt = Instant.now().plusSeconds(expirationSeconds).getEpochSecond();
-        String normalizedRole = role == null || role.isBlank() ? "USER" : role.trim().toUpperCase();
-        String payload = email + ":" + normalizedRole + ":" + expiresAt;
-        String signature = base64UrlEncode(hmac(payload));
-        String encodedPrincipal = base64UrlEncode((email + "|" + normalizedRole).getBytes(StandardCharsets.UTF_8));
-        return encodedPrincipal + "." + expiresAt + "." + signature;
+        try {
+            Map<String, Object> header = new LinkedHashMap<>();
+            header.put("alg", "HS256");
+            header.put("typ", "JWT");
+
+            Instant now = Instant.now();
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("sub", email);
+            payload.put("role", role);
+            payload.put("iat", now.getEpochSecond());
+            payload.put("exp", now.plusMillis(expirationMs).getEpochSecond());
+
+            String unsigned = encodeJson(header) + "." + encodeJson(payload);
+            return unsigned + "." + sign(unsigned);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to generate token", exception);
+        }
     }
 
-    public Optional<String> extractEmailIfValid(String token) {
-        return extractPrincipalIfValid(token).map(Principal::email);
-    }
-
-    public Optional<Principal> extractPrincipalIfValid(String token) {
+    public Principal parseToken(String token) {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != 3) {
-                return Optional.empty();
+                return null;
+            }
+            String unsigned = parts[0] + "." + parts[1];
+            if (!constantTimeEquals(sign(unsigned), parts[2])) {
+                return null;
             }
 
-            String decodedPrincipal = new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8);
-            String[] principalParts = decodedPrincipal.split("\\|");
-            String email = principalParts[0];
-            String role = principalParts.length > 1 ? principalParts[1].trim().toUpperCase() : "USER";
-            long expiresAt = Long.parseLong(parts[1]);
-            if (Instant.now().getEpochSecond() > expiresAt) {
-                return Optional.empty();
+            byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
+            Map<String, Object> payload = objectMapper.readValue(payloadBytes, new TypeReference<>() {
+            });
+            Number exp = (Number) payload.get("exp");
+            if (exp == null || exp.longValue() < Instant.now().getEpochSecond()) {
+                return null;
             }
-
-            String payload = email + ":" + role + ":" + expiresAt;
-            byte[] expected = hmac(payload);
-            byte[] provided = Base64.getUrlDecoder().decode(parts[2]);
-            if (!MessageDigest.isEqual(expected, provided)) {
-                return Optional.empty();
-            }
-
-            return Optional.of(new Principal(email, role));
-        } catch (RuntimeException ex) {
-            return Optional.empty();
+            String email = String.valueOf(payload.get("sub"));
+            String role = String.valueOf(payload.getOrDefault("role", "USER"));
+            return new Principal(email, role);
+        } catch (Exception exception) {
+            return null;
         }
     }
 
-    private byte[] hmac(String value) {
-        try {
-            Mac mac = Mac.getInstance(HMAC_ALGO);
-            mac.init(new SecretKeySpec(secretBytes, HMAC_ALGO));
-            return mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to calculate token signature", ex);
-        }
+    private String encodeJson(Map<String, Object> value) throws Exception {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(objectMapper.writeValueAsBytes(value));
     }
 
-    private static String base64UrlEncode(byte[] value) {
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(value);
+    private String sign(String unsignedToken) throws Exception {
+        Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+        mac.init(new SecretKeySpec(secret, HMAC_ALGORITHM));
+        return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(mac.doFinal(unsignedToken.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private boolean constantTimeEquals(String left, String right) {
+        return MessageDigestSupport.equals(left.getBytes(StandardCharsets.UTF_8), right.getBytes(StandardCharsets.UTF_8));
     }
 
     public record Principal(String email, String role) {

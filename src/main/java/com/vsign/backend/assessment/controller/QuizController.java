@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class QuizController {
-
     private final QuizAttemptService quizAttemptService;
 
     public QuizController(QuizAttemptService quizAttemptService) {
@@ -18,6 +17,6 @@ public class QuizController {
 
     @GetMapping("/api/v1/lessons/{lessonId}/quiz")
     public SuccessResponse<QuizResponse> getLessonQuiz(@PathVariable String lessonId) {
-        return SuccessResponse.ok("Lesson quiz retrieved", quizAttemptService.getLessonQuiz(lessonId));
+        return SuccessResponse.ok("Quiz loaded", quizAttemptService.getLessonQuiz(lessonId));
     }
 }
