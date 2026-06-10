@@ -33,8 +33,8 @@ class LearningWorkflowIT {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.size").value(2))
-                .andExpect(jsonPath("$.data.totalElements").value(2))
-                .andExpect(jsonPath("$.data.totalPages").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(6))
+                .andExpect(jsonPath("$.data.totalPages").value(3))
                 .andExpect(jsonPath("$.data.content.length()").value(2))
                 .andExpect(jsonPath("$.data.content[0].itemId").value("practice-hello"))
                 .andExpect(jsonPath("$.data.content[0].category").value("greeting"))
@@ -52,9 +52,9 @@ class LearningWorkflowIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.page").value(5))
                 .andExpect(jsonPath("$.data.size").value(1))
-                .andExpect(jsonPath("$.data.totalElements").value(2))
-                .andExpect(jsonPath("$.data.totalPages").value(2))
-                .andExpect(jsonPath("$.data.content.length()").value(0));
+                .andExpect(jsonPath("$.data.totalElements").value(6))
+                .andExpect(jsonPath("$.data.totalPages").value(6))
+                .andExpect(jsonPath("$.data.content.length()").value(1));
     }
 
     @Test
@@ -154,8 +154,8 @@ class LearningWorkflowIT {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.size").value(1))
-                .andExpect(jsonPath("$.data.totalElements").value(8))
-                .andExpect(jsonPath("$.data.totalPages").value(8))
+                .andExpect(jsonPath("$.data.totalElements").value(13))
+                .andExpect(jsonPath("$.data.totalPages").value(13))
                 .andExpect(jsonPath("$.data.units.length()").value(1))
                 .andExpect(jsonPath("$.data.units[0].unitId").value("unit-basics"))
                 .andExpect(jsonPath("$.data.units[0].chapterCount").value(2))
@@ -191,7 +191,7 @@ class LearningWorkflowIT {
                 .andExpect(jsonPath("$.data.chapterId").value("chapter-greetings"))
                 .andExpect(jsonPath("$.data.lessons[0].lessonId").value("lesson-greetings-1"))
                 .andExpect(jsonPath("$.data.lessons[0].requiresPremium").value(false))
-                .andExpect(jsonPath("$.data.lessons[1].locked").value(true));
+                .andExpect(jsonPath("$.data.lessons[1].locked").value(false));
     }
 
     @Test

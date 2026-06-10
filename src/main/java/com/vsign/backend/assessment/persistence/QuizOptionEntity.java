@@ -23,6 +23,9 @@ public class QuizOptionEntity {
     @Column(nullable = false, length = 160)
     private String text;
 
+    @Column(name = "video_url")
+    private String videoUrl;
+
     @Column(name = "order_index", nullable = false)
     private int orderIndex;
 
@@ -39,5 +42,9 @@ public class QuizOptionEntity {
 
     public String getText() {
         return text;
+    }
+
+    public String getVideoUrl() {
+        return videoUrl;
     }
 }

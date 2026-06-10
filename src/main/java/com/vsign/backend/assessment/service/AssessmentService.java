@@ -171,7 +171,7 @@ public class AssessmentService {
                 question.getQuestionId(),
                 question.getPrompt(),
                 options.stream()
-                        .map(option -> new OptionResponse(option.getOptionId(), option.getText()))
+                        .map(option -> new OptionResponse(option.getOptionId(), option.getText(), null))
                         .toList(),
                 null
         );

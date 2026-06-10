@@ -99,11 +99,11 @@ class FlywayMigrationTest {
 
         assertThat(usersTableCount).isEqualTo(1);
         assertThat(rolesCount).isEqualTo(4);
-        assertThat(dictionaryEntriesCount).isEqualTo(6);
-        assertThat(learningUnitsCount).isEqualTo(10);
-        assertThat(practiceItemsCount).isEqualTo(97);
+        assertThat(dictionaryEntriesCount).isEqualTo(28);
+        assertThat(learningUnitsCount).isEqualTo(13);
+        assertThat(practiceItemsCount).isEqualTo(126);
         assertThat(assessmentsCount).isEqualTo(3);
-        assertThat(lessonQuizzesCount).isEqualTo(14);
+        assertThat(lessonQuizzesCount).isEqualTo(43);
         assertThat(gamificationProfilesCount).isEqualTo(5);
         assertThat(subscriptionPlansCount).isEqualTo(4);
         assertThat(paymentOrdersCount).isGreaterThanOrEqualTo(2);
@@ -112,6 +112,6 @@ class FlywayMigrationTest {
         assertThat(signatureAttemptLogTableCount).isEqualTo(1);
         assertThat(dictionaryVideoVariantsTableCount).isEqualTo(1);
         assertThat(testActorAccountsCount).isEqualTo(6);
-        assertThat(appliedVersions).isEqualTo(18);
+        assertThat(appliedVersions).isEqualTo(19);
     }
 }

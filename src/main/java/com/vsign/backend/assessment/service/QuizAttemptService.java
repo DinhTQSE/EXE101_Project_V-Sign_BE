@@ -182,7 +182,7 @@ public class QuizAttemptService {
                 question.getQuestionId(),
                 question.getPrompt(),
                 options.stream()
-                        .map(option -> new OptionResponse(option.getAnswerId(), option.getText()))
+                        .map(option -> new OptionResponse(option.getAnswerId(), option.getText(), option.getVideoUrl()))
                         .toList(),
                 null
         );
